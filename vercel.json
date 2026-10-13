@@ -1,0 +1,35 @@
+{
+  "version": 2,
+  "cleanUrls": true,
+  "outputDirectory": "public",
+  "rewrites": [
+    {
+      "source": "/c/:publicId",
+      "destination": "/customer/index.html"
+    },
+    {
+      "source": "/track",
+      "destination": "/customer/track.html"
+    },
+    {
+      "source": "/expired",
+      "destination": "/customer/expired.html"
+    },
+    {
+      "source": "/app",
+      "destination": "/app/index.html"
+    },
+    {
+      "source": "/app/",
+      "destination": "/app/index.html"
+    },
+    {
+      "source": "/admin",
+      "destination": "/admin/index.html"
+    },
+    {
+      "source": "/admin/",
+      "destination": "/admin/index.html"
+    }
+  ]
+}

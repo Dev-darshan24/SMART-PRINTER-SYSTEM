@@ -21,8 +21,8 @@ const env = {
   SUPERADMIN_PASSWORD: process.env.SUPERADMIN_PASSWORD || "SuperAdmin@2026Secret",
 
   // Firebase
-  FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID || "smartprint-idea",
-  FIREBASE_STORAGE_BUCKET: process.env.FIREBASE_STORAGE_BUCKET || "smartprint-idea.appspot.com",
+  FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID || "smart-print-system-f3950",
+  FIREBASE_STORAGE_BUCKET: process.env.FIREBASE_STORAGE_BUCKET || "smart-print-system-f3950.firebasestorage.app",
 
   // Razorpay
   RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID || "rzp_live_SmartPrint9910",
