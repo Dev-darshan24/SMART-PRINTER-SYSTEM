@@ -237,14 +237,16 @@ document.addEventListener('DOMContentLoaded', () => {
       const href = btn.getAttribute('href');
       const curPath = window.location.pathname.toLowerCase();
       
-      const isCurrentPage = 
-        (targetView === 'dashboard' && (curPath.endsWith('/app/') || curPath.endsWith('/index.html') || curPath.endsWith('/dashboard.html'))) ||
-        (targetView === 'history' && curPath.includes('history.html')) ||
-        (targetView === 'analytics' && curPath.includes('analytics.html')) ||
-        (targetView === 'settings' && curPath.includes('settings.html')) ||
-        (targetView === 'profile' && curPath.includes('profile.html'));
+      const hasAllViews = !!(document.getElementById('view-dashboard') && document.getElementById('view-settings'));
 
-      if (isCurrentPage) {
+      const isCurrentPage = 
+        (targetView === 'dashboard' && (curPath.endsWith('/app/') || curPath.endsWith('/app') || curPath.includes('index') || curPath.includes('dashboard'))) ||
+        (targetView === 'history' && curPath.includes('history')) ||
+        (targetView === 'analytics' && curPath.includes('analytics')) ||
+        (targetView === 'settings' && (curPath.includes('setting') || curPath.includes('settings'))) ||
+        (targetView === 'profile' && curPath.includes('profile'));
+
+      if (hasAllViews || isCurrentPage) {
         e.preventDefault();
         switchView(targetView);
         if (isMobile()) hideSidebar();
@@ -1483,13 +1485,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Auto-detect section view from current URL pathname
+  // Auto-detect section view from current URL pathname (supports clean URLs on Vercel without .html)
   const curPagePath = window.location.pathname.toLowerCase();
   let initialView = 'dashboard';
-  if (curPagePath.includes('history.html')) initialView = 'history';
-  else if (curPagePath.includes('analytics.html')) initialView = 'analytics';
-  else if (curPagePath.includes('settings.html')) initialView = 'settings';
-  else if (curPagePath.includes('profile.html')) initialView = 'profile';
+  if (curPagePath.includes('history')) initialView = 'history';
+  else if (curPagePath.includes('analytics')) initialView = 'analytics';
+  else if (curPagePath.includes('setting')) initialView = 'settings';
+  else if (curPagePath.includes('profile')) initialView = 'profile';
 
   switchView(initialView);
 });
@@ -1511,7 +1513,14 @@ function switchView(viewName) {
   });
 
   const activeViewEl = document.getElementById(`view-${target}`) || document.getElementById(`view-${viewName}`);
-  if (activeViewEl) activeViewEl.style.display = 'block';
+  if (activeViewEl) {
+    activeViewEl.style.display = 'block';
+  } else {
+    // Safety fallback: If activeViewEl not found (e.g. dedicated section page like settings.html, history.html),
+    // ensure the page's primary tab-view-content remains visible!
+    const singleView = document.querySelector('.tab-view-content');
+    if (singleView) singleView.style.display = 'block';
+  }
 
   const breadcrumb = document.getElementById('view-title-breadcrumb');
   if (breadcrumb) {

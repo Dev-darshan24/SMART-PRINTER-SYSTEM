@@ -8,7 +8,33 @@ import { stateStore } from './state.js';
 export const api = {
   // Public customer APIs
   async getPublicCenter(publicOrCenterId) {
-    const center = stateStore.getCenter(publicOrCenterId);
+    let center = stateStore.getCenter(publicOrCenterId);
+    
+    // Fallback: If not in local browser store (e.g. mobile customer scanning store QR), fetch from Firestore
+    if (!center && publicOrCenterId && publicOrCenterId !== 'default') {
+      try {
+        const { db, doc, getDoc, collection, query, where, getDocs } = await import('./firebase-config.js');
+        if (db) {
+          const docSnap = await getDoc(doc(db, "centers", publicOrCenterId));
+          if (docSnap.exists()) {
+            center = { id: docSnap.id, centerId: docSnap.id, ...docSnap.data() };
+          } else {
+            const q = query(collection(db, "centers"), where("publicId", "==", publicOrCenterId));
+            const querySnap = await getDocs(q);
+            if (!querySnap.empty) {
+              const first = querySnap.docs[0];
+              center = { id: first.id, centerId: first.id, ...first.data() };
+            }
+          }
+          if (center) {
+            stateStore.saveCenter(center);
+          }
+        }
+      } catch (err) {
+        console.warn("Could not query center from Firestore:", err.message);
+      }
+    }
+
     if (!center) {
       throw new Error("Center not found or inactive.");
     }
@@ -81,7 +107,25 @@ export const api = {
   },
 
   async getJobStatus(trackingToken) {
-    const job = stateStore.getJobByToken(trackingToken);
+    let job = stateStore.getJobByToken(trackingToken);
+
+    // Fallback: If not found in local browser session, query Firestore
+    if (!job && trackingToken) {
+      try {
+        const { db, collectionGroup, query, where, getDocs } = await import('./firebase-config.js');
+        if (db) {
+          const q = query(collectionGroup(db, "printJobs"), where("trackingToken", "==", trackingToken.trim().toUpperCase()));
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+            job = snap.docs[0].data();
+            stateStore.saveJob(job);
+          }
+        }
+      } catch (err) {
+        console.warn("Could not query print job from Firestore:", err.message);
+      }
+    }
+
     if (!job) {
       throw new Error("Invalid tracking code or job expired.");
     }
