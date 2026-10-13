@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SmartPrint — Center Settings</title>
+  <meta name="description" content="Configure automated per-page pricing, counter standee QR, queue preferences, and subscription tier." />
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="/assets/css/tokens.css" />
+  <link rel="stylesheet" href="/assets/css/base.css" />
+  <link rel="stylesheet" href="/assets/css/components.css" />
+  <link rel="stylesheet" href="/assets/css/dashboard.css" />
+  <script src="/__env.js"></script>
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem('smartprint_theme') || 'light';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    })();
+  </script>
+  <script type="module">
+    import { authManager, ROLES } from '/assets/js/auth/authManager.js';
+    const user = authManager.getCurrentUser();
+    if (!user || (user.role !== ROLES.OWNER && user.role !== ROLES.SUPERADMIN)) {
+      window.location.replace('/login.html?redirect=' + encodeURIComponent(window.location.pathname));
+    }
+  </script>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Slide Bar (Sidebar) -->
+    <aside class="app-sidebar" id="app-sidebar" aria-label="Main Navigation">
+      <div class="sidebar-header">
+        <a href="/app/index.html" class="brand-logo">
+          <div class="brand-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+          </div>
+          <span>SmartPrint</span>
+        </a>
+        <button type="button" class="sidebar-hide-btn" id="sidebar-hide-btn" aria-label="Toggle Slide Bar" title="Toggle Slide Bar">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="18" height="18" x="3" y="3" rx="3"></rect>
+            <path d="M9 3v18"></path>
+          </svg>
+        </button>
+      </div>
+
+      <nav class="sidebar-nav">
+        <!-- 1. Dashboard -->
+        <a href="/app/index.html" class="nav-item sidebar-tab-btn" data-view="dashboard" id="nav-btn-dashboard">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+          <span>Dashboard</span>
+        </a>
+
+        <!-- 2. History -->
+        <a href="/app/history.html" class="nav-item sidebar-tab-btn" data-view="history" id="nav-btn-history">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          <span>History</span>
+        </a>
+
+        <!-- 3. Analytics -->
+        <a href="/app/analytics.html" class="nav-item sidebar-tab-btn" data-view="analytics" id="nav-btn-analytics">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="20" x2="18" y2="10"></line>
+            <line x1="12" y1="20" x2="12" y2="4"></line>
+            <line x1="6" y1="20" x2="6" y2="14"></line>
+          </svg>
+          <span>Analytics</span>
+        </a>
+
+        <!-- 4. Setting -->
+        <a href="/app/settings.html" class="nav-item active sidebar-tab-btn" data-view="settings" id="nav-btn-settings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          <span>Setting</span>
+        </a>
+
+        <!-- 5. Profile -->
+        <a href="/app/profile.html" class="nav-item sidebar-tab-btn" data-view="profile" id="nav-btn-profile">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+          <span>Profile</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-profile-badge">
+          <div class="user-avatar" id="user-avatar-initials">--</div>
+          <div class="user-info">
+            <span class="user-name" id="current-center-name">Loading center...</span>
+            <span class="user-role" id="current-user-email">owner@center.com</span>
+          </div>
+        </div>
+        <button type="button" class="sidebar-logout-btn" id="logout-btn" title="Sign Out" aria-label="Sign Out">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+            <polyline points="16 17 21 12 16 7"></polyline>
+            <line x1="21" y1="12" x2="9" y2="12"></line>
+          </svg>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Slide Bar Mobile Backdrop -->
+    <div class="sidebar-backdrop" id="sidebar-backdrop" aria-hidden="true"></div>
+
+    <!-- Main Workspace -->
+    <main class="app-main">
+      <header class="app-topbar">
+        <div class="topbar-left">
+          <button type="button" class="btn-sidebar-toggle" id="sidebar-toggle-btn" aria-label="Toggle navigation slide bar" aria-controls="app-sidebar" aria-expanded="true" title="Toggle Slide Bar">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect width="18" height="18" x="3" y="3" rx="3"></rect>
+              <path d="M9 3v18"></path>
+            </svg>
+          </button>
+          <div class="breadcrumb-trail">
+            <span>SmartPrint</span>
+            <span>/</span>
+            <span class="breadcrumb-current" id="view-title-breadcrumb">Setting</span>
+          </div>
+        </div>
+
+        <div class="topbar-actions">
+          <!-- Small Dark / Light Theme Toggle Button -->
+          <button type="button" class="theme-toggle-btn" id="theme-toggle-btn" aria-label="Toggle Dark / Light Theme" title="Toggle Dark/Light Theme">
+            <span id="theme-icon-moon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+              </svg>
+            </span>
+            <span id="theme-icon-sun" style="display: none;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="5"></circle>
+                <line x1="12" y1="1" x2="12" y2="3"></line>
+                <line x1="12" y1="21" x2="12" y2="23"></line>
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                <line x1="1" y1="12" x2="3" y2="12"></line>
+                <line x1="21" y1="12" x2="23" y2="12"></line>
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+              </svg>
+            </span>
+          </button>
+
+          <a href="#" target="_blank" class="btn btn-secondary btn-sm" id="topbar-customer-link" style="display: none;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+            Open Customer Page
+          </a>
+        </div>
+      </header>
+
+      <div class="workspace-content">
+        <!-- VIEW 4: SETTING -->
+        <div id="view-settings" class="tab-view-content" style="display: block;">
+          <h2 style="margin-bottom: 1.25rem;">Center Settings & Hardware Configuration</h2>
+          
+          <div class="settings-grid">
+            <!-- Card 1: Per-Page Rates (Save, Edit, Update) -->
+            <div class="glass-panel setting-card" id="card-pricing-rates">
+              <div class="flex justify-between items-center">
+                <div class="setting-card-title">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                  Per-Page Pricing Rates (₹)
+                </div>
+                <span class="badge badge-completed text-xs font-semibold" id="rates-status-badge">Live Rates</span>
+              </div>
+              <p class="text-xs text-muted">Configures the automated pricing applied on customer document uploads. Owner can edit, update, and save anytime.</p>
+              
+              <form id="settings-rates-form">
+                <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 1rem;">
+                  <div class="form-group">
+                    <label class="form-label" for="rate-bw-single">B&W Single Sided (₹)</label>
+                    <input type="number" step="0.5" min="0.5" id="rate-bw-single" class="form-input" required />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="rate-bw-double">B&W Double Sided (₹)</label>
+                    <input type="number" step="0.5" min="0.5" id="rate-bw-double" class="form-input" required />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="rate-color-single">Color Single Sided (₹)</label>
+                    <input type="number" step="0.5" min="1" id="rate-color-single" class="form-input" required />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="rate-color-double">Color Double Sided (₹)</label>
+                    <input type="number" step="0.5" min="1" id="rate-color-double" class="form-input" required />
+                  </div>
+                </div>
+
+                <!-- Quick Preset Tags -->
+                <div style="margin-top: 0.75rem;">
+                  <span class="text-xs text-muted" style="font-weight: 600;">Quick Presets:</span>
+                  <div class="rates-presets-bar">
+                    <button type="button" class="rates-preset-btn" data-preset="standard">Standard (₹2 / ₹3.5 / ₹10 / ₹18)</button>
+                    <button type="button" class="rates-preset-btn" data-preset="budget">Budget (₹1.5 / ₹3.0 / ₹8 / ₹15)</button>
+                    <button type="button" class="rates-preset-btn" data-preset="premium">Premium (₹2 / ₹4.0 / ₹12 / ₹20)</button>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-2" style="margin-top: 1.25rem;">
+                  <button type="button" class="btn btn-secondary btn-sm" id="btn-edit-rates">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                    Edit Rates
+                  </button>
+                  <button type="submit" class="btn btn-primary btn-sm" id="btn-save-rates">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    Save & Update Rates
+                  </button>
+                  <button type="button" class="btn btn-ghost btn-sm" id="btn-reset-rates" title="Reset changes" style="color: var(--text-muted);">
+                    Reset
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <!-- Card 2: Printers Status (All Connected Printers) -->
+            <div class="glass-panel setting-card" id="card-connected-printers">
+              <div class="flex justify-between items-center">
+                <div class="setting-card-title">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                  Connected Printers Status
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="badge badge-submitted text-xs font-semibold" id="printer-count-badge">Checking...</span>
+                  <button type="button" class="btn btn-ghost btn-sm" id="btn-refresh-printers" title="Scan & Refresh Connected Printers" style="padding: 0.25rem 0.5rem; height: 28px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                    Scan
+                  </button>
+                </div>
+              </div>
+              <div class="flex justify-between items-center">
+                <p class="text-xs text-muted" style="margin-bottom: 0;">Printers detected on this device.</p>
+                <span class="text-xs text-muted" id="printer-scan-time" style="font-size: 0.72rem;">Updated just now</span>
+              </div>
+
+              <!-- List of Connected Printers (Dynamically Populated with Real Hardware Only) -->
+              <div class="printer-devices-grid" id="printers-status-list">
+                <div class="text-xs text-muted" style="padding: 2rem 1rem; text-align: center; grid-column: 1 / -1;">
+                  Scanning workstation for connected printers...
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 3: Printer Sequence & Priority for B&W and Colour (Set by Owner) -->
+            <div class="glass-panel setting-card" id="card-printer-sequence" style="grid-column: 1 / -1;">
+              <div class="flex justify-between items-center" style="flex-wrap: wrap; gap: 0.75rem;">
+                <div class="setting-card-title">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5"></path><path d="M4 20L21 3"></path><path d="M21 16v5h-5"></path><path d="M15 15l6 6"></path><path d="M4 4l5 5"></path></svg>
+                  Printer Sequence Priority (B&W &amp; Colour)
+                </div>
+                <span class="badge badge-submitted text-xs font-semibold" id="priority-rule-summary">
+                  Checking connected printers...
+                </span>
+              </div>
+              <p class="text-xs text-muted">
+                Configure which connected printer gets priority for <strong>Black &amp; White</strong> and <strong>Colour</strong> print orders. If Priority 1 is busy or out of paper, SmartPrint automatically shifts jobs to Priority 2.
+              </p>
+
+              <form id="printer-priority-form">
+                <div class="priority-sequence-grid">
+                  <!-- Column 1: B&W Print Priority Sequence -->
+                  <div class="priority-column-card">
+                    <div class="priority-column-header">
+                      <div class="flex items-center gap-2">
+                        <div class="brand-icon" style="width: 24px; height: 24px; background: var(--text-main); color: white; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 700;">
+                          B&amp;W
+                        </div>
+                        <h4 style="font-size: 0.95rem; font-weight: 700; margin: 0;">B&amp;W Priority Sequence</h4>
+                      </div>
+                      <span class="badge text-xs" style="background: var(--bg-surface-subtle); color: var(--text-muted);">Monochrome</span>
+                    </div>
+
+                    <!-- Priority 1 B&W -->
+                    <div class="priority-step-item">
+                      <div class="priority-step-label">
+                        <span>1st Choice (Primary)</span>
+                        <span class="priority-badge-pill priority-badge-p1">Priority 1</span>
+                      </div>
+                      <select class="form-select text-xs" id="seq-bw-p1" required>
+                        <option value="None">Scanning connected devices...</option>
+                      </select>
+                    </div>
+
+                    <!-- Priority 2 B&W -->
+                    <div class="priority-step-item">
+                      <div class="priority-step-label">
+                        <span>2nd Choice (Failover / Large Batches)</span>
+                        <span class="priority-badge-pill priority-badge-p2">Priority 2</span>
+                      </div>
+                      <select class="form-select text-xs" id="seq-bw-p2">
+                        <option value="None">None (Do Not Failover)</option>
+                      </select>
+                    </div>
+
+                    <!-- Priority 3 B&W -->
+                    <div class="priority-step-item">
+                      <div class="priority-step-label">
+                        <span>3rd Choice (Backup)</span>
+                        <span class="priority-badge-pill priority-badge-p3">Priority 3</span>
+                      </div>
+                      <select class="form-select text-xs" id="seq-bw-p3">
+                        <option value="None">None (No 3rd Backup)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <!-- Column 2: Colour Print Priority Sequence -->
+                  <div class="priority-column-card">
+                    <div class="priority-column-header">
+                      <div class="flex items-center gap-2">
+                        <div class="brand-icon" style="width: 24px; height: 24px; background: linear-gradient(135deg, #ec4899, #8b5cf6, #3b82f6); color: white; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 700;">
+                          CLR
+                        </div>
+                        <h4 style="font-size: 0.95rem; font-weight: 700; margin: 0;">Colour Priority Sequence</h4>
+                      </div>
+                      <span class="badge text-xs" style="background: rgba(124, 58, 237, 0.12); color: var(--primary-700);">Full Colour</span>
+                    </div>
+
+                    <!-- Priority 1 Colour -->
+                    <div class="priority-step-item">
+                      <div class="priority-step-label">
+                        <span>1st Choice (Primary)</span>
+                        <span class="priority-badge-pill priority-badge-p1">Priority 1</span>
+                      </div>
+                      <select class="form-select text-xs" id="seq-color-p1" required>
+                        <option value="None">Scanning connected devices...</option>
+                      </select>
+                    </div>
+
+                    <!-- Priority 2 Colour -->
+                    <div class="priority-step-item">
+                      <div class="priority-step-label">
+                        <span>2nd Choice (Failover / Laser Color)</span>
+                        <span class="priority-badge-pill priority-badge-p2">Priority 2</span>
+                      </div>
+                      <select class="form-select text-xs" id="seq-color-p2">
+                        <option value="None">None (Do Not Failover)</option>
+                      </select>
+                    </div>
+
+                    <!-- Priority 3 Colour -->
+                    <div class="priority-step-item">
+                      <div class="priority-step-label">
+                        <span>3rd Choice (Backup)</span>
+                        <span class="priority-badge-pill priority-badge-p3">Priority 3</span>
+                      </div>
+                      <select class="form-select text-xs" id="seq-color-p3">
+                        <option value="None">None (No 3rd Color Unit)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Sequence Routing Flags & Action -->
+                <div class="flex justify-between items-center" style="margin-top: 1.25rem; flex-wrap: wrap; gap: 1rem;">
+                  <div class="flex items-center gap-4">
+                    <label class="flex items-center gap-2 text-xs" style="cursor: pointer;">
+                      <input type="checkbox" id="seq-auto-failover" checked />
+                      <span>Automatic failover if Priority 1 unit has paper-out or offline</span>
+                    </label>
+                    <label class="flex items-center gap-2 text-xs" style="cursor: pointer;">
+                      <input type="checkbox" id="seq-auto-duplex-match" checked />
+                      <span>Auto-prefer duplex unit for double-sided documents</span>
+                    </label>
+                  </div>
+                  <button type="submit" class="btn btn-primary" id="btn-save-printer-priority">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                    Save Sequence Priority
+                  </button>
+                </div>
+              </form>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- QR Modal -->
+  <div class="modal-overlay" id="qr-modal" aria-hidden="true">
+    <div class="modal-card">
+      <div class="flex justify-between items-center" style="margin-bottom: 1.25rem;">
+        <h3>Counter QR Code Standee</h3>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('qr-modal').classList.remove('active')">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div id="qr-modal-content">
+        <!-- Rendered by app.js -->
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/assets/js/app.js"></script>
+</body>
+</html>

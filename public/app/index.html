@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Center Management — SmartPrint Owner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/tokens.css">
+  <link rel="stylesheet" href="/assets/css/base.css">
+  <link rel="stylesheet" href="/assets/css/components.css">
+  <link rel="stylesheet" href="/assets/css/dashboard.css">
+  <script src="/__env.js"></script>
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem('smartprint_theme') || 'light';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    })();
+  </script>
+  <script type="module">
+    import { authManager, ROLES } from '/assets/js/auth/authManager.js';
+    const user = authManager.getCurrentUser();
+    if (!user || (user.role !== ROLES.OWNER && user.role !== ROLES.SUPERADMIN)) {
+      window.location.replace('/login.html?redirect=' + encodeURIComponent(window.location.pathname));
+    }
+  </script>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Slide Bar (Sidebar) -->
+    <aside class="app-sidebar" id="app-sidebar" aria-label="Main Navigation">
+      <div class="sidebar-header">
+        <a href="/app/" class="brand-logo">
+          <div class="brand-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+          </div>
+          <span>SmartPrint</span>
+        </a>
+        <button type="button" class="sidebar-hide-btn" id="sidebar-hide-btn" aria-label="Toggle Slide Bar" title="Toggle Slide Bar">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="18" height="18" x="3" y="3" rx="3"></rect>
+            <path d="M9 3v18"></path>
+          </svg>
+        </button>
+      </div>
+
+      <nav class="sidebar-nav">
+        <!-- 1. Dashboard -->
+        <a href="/app/index.html" class="nav-item active sidebar-tab-btn" data-view="dashboard" id="nav-btn-dashboard">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+          <span>Dashboard</span>
+        </a>
+
+        <!-- 2. History -->
+        <a href="/app/history.html" class="nav-item sidebar-tab-btn" data-view="history" id="nav-btn-history">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          <span>History</span>
+        </a>
+
+        <!-- 3. Analytics -->
+        <a href="/app/analytics.html" class="nav-item sidebar-tab-btn" data-view="analytics" id="nav-btn-analytics">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="20" x2="18" y2="10"></line>
+            <line x1="12" y1="20" x2="12" y2="4"></line>
+            <line x1="6" y1="20" x2="6" y2="14"></line>
+          </svg>
+          <span>Analytics</span>
+        </a>
+
+        <!-- 4. Setting -->
+        <a href="/app/settings.html" class="nav-item sidebar-tab-btn" data-view="settings" id="nav-btn-settings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          <span>Setting</span>
+        </a>
+
+        <!-- 5. Profile -->
+        <a href="/app/profile.html" class="nav-item sidebar-tab-btn" data-view="profile" id="nav-btn-profile">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+          <span>Profile</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-profile-badge">
+          <div class="user-avatar" id="user-avatar-initials">--</div>
+          <div class="user-info">
+            <span class="user-name" id="current-center-name">Loading center...</span>
+            <span class="user-role" id="current-user-email">owner@center.com</span>
+          </div>
+        </div>
+        <button type="button" class="sidebar-logout-btn" id="logout-btn" title="Sign Out" aria-label="Sign Out">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+            <polyline points="16 17 21 12 16 7"></polyline>
+            <line x1="21" y1="12" x2="9" y2="12"></line>
+          </svg>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Slide Bar Mobile Backdrop -->
+    <div class="sidebar-backdrop" id="sidebar-backdrop" aria-hidden="true"></div>
+
+    <!-- Main Workspace -->
+    <main class="app-main">
+      <header class="app-topbar">
+        <div class="topbar-left">
+          <button type="button" class="btn-sidebar-toggle" id="sidebar-toggle-btn" aria-label="Toggle navigation slide bar" aria-controls="app-sidebar" aria-expanded="true" title="Toggle Slide Bar">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect width="18" height="18" x="3" y="3" rx="3"></rect>
+              <path d="M9 3v18"></path>
+            </svg>
+          </button>
+          <div class="breadcrumb-trail">
+            <span>SmartPrint</span>
+            <span>/</span>
+            <span class="breadcrumb-current" id="view-title-breadcrumb">Dashboard</span>
+          </div>
+        </div>
+
+        <div class="topbar-actions">
+          <!-- Small Dark / Light Theme Toggle Button -->
+          <button type="button" class="theme-toggle-btn" id="theme-toggle-btn" aria-label="Toggle Dark / Light Theme" title="Toggle Dark/Light Theme">
+            <span id="theme-icon-moon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+              </svg>
+            </span>
+            <span id="theme-icon-sun" style="display: none;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="5"></circle>
+                <line x1="12" y1="1" x2="12" y2="3"></line>
+                <line x1="12" y1="21" x2="12" y2="23"></line>
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                <line x1="1" y1="12" x2="3" y2="12"></line>
+                <line x1="21" y1="12" x2="23" y2="12"></line>
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+              </svg>
+            </span>
+          </button>
+
+          <a href="#" target="_blank" class="btn btn-secondary btn-sm" id="topbar-customer-link" style="display: none;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+            Open Customer Page
+          </a>
+        </div>
+      </header>
+
+      <div class="workspace-content">
+        <!-- VIEW 1: DASHBOARD -->
+        <div id="view-dashboard" class="tab-view-content">
+          <!-- KPI Row: Today's Earning, Orders Pending, How Many Orders Today, Reject Print -->
+          <div class="kpi-grid">
+            <!-- 1. TODAYS EARNING -->
+            <div class="kpi-card" id="kpi-card-earning">
+              <div class="kpi-header">
+                <span class="kpi-label">Today's Earning</span>
+                <div class="kpi-icon" style="background: var(--success-bg); color: var(--success-solid);" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                </div>
+              </div>
+              <div class="kpi-value" id="kpi-todays-earning">₹0.00</div>
+              <span class="kpi-subtext">Completed orders today</span>
+            </div>
+
+            <!-- 2. ORDERS PENDING -->
+            <div class="kpi-card" id="kpi-card-pending">
+              <div class="kpi-header">
+                <span class="kpi-label">Orders Pending</span>
+                <div class="kpi-icon" style="background: var(--warning-bg); color: var(--warning-solid);" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                </div>
+              </div>
+              <div class="kpi-value" id="kpi-orders-pending">0</div>
+              <span class="kpi-subtext">Active in queue</span>
+            </div>
+
+            <!-- 3. HOW MANY ORDERS TODAY -->
+            <div class="kpi-card" id="kpi-card-today">
+              <div class="kpi-header">
+                <span class="kpi-label">How Many Orders Today</span>
+                <div class="kpi-icon" style="background: var(--info-bg); color: var(--info-solid);" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+                </div>
+              </div>
+              <div class="kpi-value" id="kpi-orders-today">0</div>
+              <span class="kpi-subtext">Total received today</span>
+            </div>
+
+            <!-- 4. REJECT PRINT -->
+            <div class="kpi-card" id="kpi-card-reject">
+              <div class="kpi-header">
+                <span class="kpi-label">Reject Print</span>
+                <div class="kpi-icon" style="background: var(--error-bg); color: var(--error-solid);" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                </div>
+              </div>
+              <div class="kpi-value" id="kpi-reject-print">0</div>
+              <span class="kpi-subtext">Rejected print requests</span>
+            </div>
+          </div>
+
+          <!-- Queue Filter & Search Bar -->
+          <div class="filter-bar">
+            <div class="filter-tabs">
+              <button class="filter-tab active" data-status="all">
+                All Jobs <span class="tab-count" id="count-all">0</span>
+              </button>
+              <button class="filter-tab" data-status="submitted">
+                Submitted <span class="tab-count" id="count-submitted">0</span>
+              </button>
+              <button class="filter-tab" data-status="under_review">
+                Under Review <span class="tab-count" id="count-under_review">0</span>
+              </button>
+              <button class="filter-tab" data-status="printing">
+                Printing <span class="tab-count" id="count-printing">0</span>
+              </button>
+              <button class="filter-tab" data-status="completed">
+                Completed <span class="tab-count" id="count-completed">0</span>
+              </button>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <input type="text" class="form-input text-xs" placeholder="Search filename or token..." id="search-queue-input" style="width: 220px;" />
+            </div>
+          </div>
+
+          <!-- Live Queue Table -->
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Document Details</th>
+                  <th>Tracking Token</th>
+                  <th>Print Options</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                  <th>Received</th>
+                  <th class="text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody id="queue-table-body">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Queue Footer: Last 5 Orders Notice & Link to History -->
+          <div class="flex justify-between items-center" style="margin-top: 0.75rem; padding: 0.25rem 0.5rem;">
+            <span class="text-xs text-muted" id="dashboard-queue-subtext">Showing last 5 orders</span>
+            <button class="btn btn-ghost btn-sm" id="btn-view-all-history" style="color: var(--primary-600); font-size: 0.8125rem; font-weight: 500;">
+              View Total Orders in History &rarr;
+            </button>
+          </div>
+        </div>
+
+        <!-- VIEW 2: HISTORY -->
+        <div id="view-history" class="tab-view-content" style="display: none;">
+          <div class="flex justify-between items-center" style="margin-bottom: 1.25rem;">
+            <div class="flex items-center gap-2">
+              <h2>Total Orders History</h2>
+              <span class="badge" id="history-total-badge" style="background: var(--primary-100); color: var(--primary-700); font-size: 0.8rem; font-weight: 600;">0 Orders</span>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="window.print()">Export History Report</button>
+          </div>
+
+          <!-- History Date Filter Bar -->
+          <div class="filter-bar" style="margin-bottom: 1rem;">
+            <div class="filter-tabs" id="history-filter-tabs">
+              <button class="filter-tab active history-filter-btn" data-range="all">
+                All Orders <span class="tab-count" id="history-count-all">0</span>
+              </button>
+              <button class="filter-tab history-filter-btn" data-range="today">
+                Today <span class="tab-count" id="history-count-today">0</span>
+              </button>
+              <button class="filter-tab history-filter-btn" data-range="7days">
+                Last 7 Days <span class="tab-count" id="history-count-7days">0</span>
+              </button>
+              <button class="filter-tab history-filter-btn" data-range="3months">
+                3 Months <span class="tab-count" id="history-count-3months">0</span>
+              </button>
+              <button class="filter-tab history-filter-btn" data-range="6months">
+                6 Months <span class="tab-count" id="history-count-6months">0</span>
+              </button>
+              <button class="filter-tab history-filter-btn" data-range="1year" id="history-tab-year" title="Annual Year Cycle (2026 - 2027)">
+                <span id="history-year-tab-label">2026 - 2027</span> <span class="tab-count" id="history-count-1year">0</span>
+              </button>
+            </div>
+            <div class="flex items-center gap-2">
+              <input type="text" class="form-input text-xs" placeholder="Search history..." id="search-history-input" style="width: 200px;" />
+            </div>
+          </div>
+
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Document</th>
+                  <th>Tracking Token</th>
+                  <th>Pages & Copies</th>
+                  <th>Options</th>
+                  <th>Total Cost</th>
+                  <th>Date & Time</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="history-table-body">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- History Retention Subtext -->
+          <div class="flex justify-between items-center" style="margin-top: 0.75rem; padding: 0.25rem 0.5rem;">
+            <span class="text-xs text-muted" id="history-filter-subtext">Showing all orders &bull; Orders older than 1 year are automatically deleted</span>
+            <span class="badge" style="background: var(--bg-surface-subtle); color: var(--text-muted); font-size: 0.75rem;">1-Year Auto-Delete Active</span>
+          </div>
+        </div>
+
+        <!-- VIEW 3: ANALYTICS -->
+        <div id="view-analytics" class="tab-view-content" style="display: none;">
+          <!-- Header and Filter Controls -->
+          <div class="flex justify-between items-center" style="margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1rem;">
+            <div>
+              <div class="flex items-center gap-2">
+                <h2 style="margin-bottom: 0;">Center Analytics & Insights</h2>
+                <span class="badge" id="analytics-total-badge" style="background: var(--primary-100); color: var(--primary-700); font-weight: 600;">Active Metrics</span>
+              </div>
+              <p class="text-xs text-muted" id="analytics-filter-subtext" style="margin-top: 0.25rem;">
+                Comprehensive revenue trends, comparative breakdown, and job fulfillment statistics
+              </p>
+            </div>
+
+            <!-- Timeframe Filter Buttons -->
+            <div class="filter-tabs" role="tablist" aria-label="Analytics timeframe range" id="analytics-filter-group">
+              <button type="button" class="filter-tab analytics-filter-btn active" data-range="all">All Time</button>
+              <button type="button" class="filter-tab analytics-filter-btn" data-range="today">Today</button>
+              <button type="button" class="filter-tab analytics-filter-btn" data-range="7days">Last 7 Days</button>
+              <button type="button" class="filter-tab analytics-filter-btn" data-range="30days">30 Days</button>
+              <button type="button" class="filter-tab analytics-filter-btn" data-range="3months">3 Months</button>
+              <button type="button" class="filter-tab analytics-filter-btn" data-range="6months">6 Months</button>
+              <button type="button" class="filter-tab analytics-filter-btn" data-range="1year" id="analytics-year-filter-btn">
+                <span id="analytics-year-tab-label">2026 - 2027</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Dynamic Analytics Content (KPIs, Graphs, Comparisons, Detail Table) -->
+          <div id="analytics-content-view">
+            <!-- Dynamically populated by renderAnalyticsSection() in app.js -->
+          </div>
+        </div>
+
+        <!-- VIEW 4: SETTING -->
+        <div id="view-settings" class="tab-view-content" style="display: none;">
+          <h2 style="margin-bottom: 1.25rem;">Center Settings &amp; Hardware Configuration</h2>
+          
+          <div class="settings-grid">
+            <!-- Card 1: Per-Page Rates (Save, Edit, Update) -->
+            <div class="glass-panel setting-card" id="card-pricing-rates">
+              <div class="flex justify-between items-center">
+                <div class="setting-card-title">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                  Per-Page Pricing Rates (₹)
+                </div>
+                <span class="badge badge-completed text-xs font-semibold" id="rates-status-badge">Live Rates</span>
+              </div>
+              <p class="text-xs text-muted">Configures the automated pricing applied on customer document uploads. Owner can edit, update, and save anytime.</p>
+              
+              <form id="settings-rates-form">
+                <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 1rem;">
+                  <div class="form-group">
+                    <label class="form-label" for="rate-bw-single">B&W Single Sided (₹)</label>
+                    <input type="number" step="0.5" min="0.5" id="rate-bw-single" class="form-input" required />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="rate-bw-double">B&W Double Sided (₹)</label>
+                    <input type="number" step="0.5" min="0.5" id="rate-bw-double" class="form-input" required />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="rate-color-single">Color Single Sided (₹)</label>
+                    <input type="number" step="0.5" min="1" id="rate-color-single" class="form-input" required />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="rate-color-double">Color Double Sided (₹)</label>
+                    <input type="number" step="0.5" min="1" id="rate-color-double" class="form-input" required />
+                  </div>
+                </div>
+
+                <!-- Quick Preset Tags -->
+                <div style="margin-top: 0.75rem;">
+                  <span class="text-xs text-muted" style="font-weight: 600;">Quick Presets:</span>
+                  <div class="rates-presets-bar">
+                    <button type="button" class="rates-preset-btn" data-preset="standard">Standard (₹2 / ₹3.5 / ₹10 / ₹18)</button>
+                    <button type="button" class="rates-preset-btn" data-preset="budget">Budget (₹1.5 / ₹3.0 / ₹8 / ₹15)</button>
+                    <button type="button" class="rates-preset-btn" data-preset="premium">Premium (₹2 / ₹4.0 / ₹12 / ₹20)</button>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-2" style="margin-top: 1.25rem;">
+                  <button type="button" class="btn btn-secondary btn-sm" id="btn-edit-rates">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                    Edit Rates
+                  </button>
+                  <button type="submit" class="btn btn-primary btn-sm" id="btn-save-rates">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    Save &amp; Update Rates
+                  </button>
+                  <button type="button" class="btn btn-ghost btn-sm" id="btn-reset-rates" title="Reset changes" style="color: var(--text-muted);">
+                    Reset
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <!-- Card 2: Printers Status (All Connected Printers) -->
+            <div class="glass-panel setting-card" id="card-connected-printers">
+              <div class="flex justify-between items-center">
+                <div class="setting-card-title">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                  Connected Printers Status
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="badge badge-submitted text-xs font-semibold" id="printer-count-badge">Checking...</span>
+                  <button type="button" class="btn btn-ghost btn-sm" id="btn-refresh-printers" title="Scan & Refresh Connected Printers" style="padding: 0.25rem 0.5rem; height: 28px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                    Scan
+                  </button>
+                </div>
+              </div>
+              <div class="flex justify-between items-center">
+                <p class="text-xs text-muted" style="margin-bottom: 0;">Printers detected on this device.</p>
+                <span class="text-xs text-muted" id="printer-scan-time" style="font-size: 0.72rem;">Updated just now</span>
+              </div>
+
+              <!-- List of Connected Printers (Dynamically Populated with Real Hardware Only) -->
+              <div class="printer-devices-grid" id="printers-status-list">
+                <div class="text-xs text-muted" style="padding: 2rem 1rem; text-align: center; grid-column: 1 / -1;">
+                  Scanning workstation for connected printers...
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 3: Printer Sequence & Priority for B&W and Colour (Set by Owner) -->
+            <div class="glass-panel setting-card" id="card-printer-sequence" style="grid-column: 1 / -1;">
+              <div class="flex justify-between items-center" style="flex-wrap: wrap; gap: 0.75rem;">
+                <div class="setting-card-title">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5"></path><path d="M4 20L21 3"></path><path d="M21 16v5h-5"></path><path d="M15 15l6 6"></path><path d="M4 4l5 5"></path></svg>
+                  Printer Sequence Priority (B&amp;W &amp; Colour)
+                </div>
+                <span class="badge badge-submitted text-xs font-semibold" id="priority-rule-summary">
+                  Checking connected printers...
+                </span>
+              </div>
+              <p class="text-xs text-muted">
+                Configure which connected printer gets priority for <strong>Black &amp; White</strong> and <strong>Colour</strong> print orders. If Priority 1 is busy or out of paper, SmartPrint automatically shifts jobs to Priority 2.
+              </p>
+
+              <form id="printer-priority-form">
+                <div class="priority-sequence-grid">
+                  <!-- Column 1: B&W Print Priority Sequence -->
+                  <div class="priority-column-card">
+                    <div class="priority-column-header">
+                      <div class="flex items-center gap-2">
+                        <div class="brand-icon" style="width: 24px; height: 24px; background: var(--text-main); color: white; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 700;">
+                          B&amp;W
+                        </div>
+                        <h4 style="font-size: 0.95rem; font-weight: 700; margin: 0;">B&amp;W Priority Sequence</h4>
+                      </div>
+                      <span class="badge text-xs" style="background: var(--bg-surface-subtle); color: var(--text-muted);">Monochrome</span>
+                    </div>
+
+                    <!-- Priority 1 B&W -->
+                    <div class="priority-step-item">
+                      <div class="priority-step-label">
+                        <span>1st Choice (Primary)</span>
+                        <span class="priority-badge-pill priority-badge-p1">Priority 1</span>
+                      </div>
+                      <select class="form-select text-xs" id="seq-bw-p1" required>
+                        <option value="None">Scanning connected devices...</option>
+                      </select>
+                    </div>
+
+                    <!-- Priority 2 B&W -->
+                    <div class="priority-step-item">
+                      <div class="priority-step-label">
+                        <span>2nd Choice (Failover / Large Batches)</span>
+                        <span class="priority-badge-pill priority-badge-p2">Priority 2</span>
+                      </div>
+                      <select class="form-select text-xs" id="seq-bw-p2">
+                        <option value="None">None (Do Not Failover)</option>
+                      </select>
+                    </div>
+
+                    <!-- Priority 3 B&W -->
+                    <div class="priority-step-item">
+                      <div class="priority-step-label">
+                        <span>3rd Choice (Backup)</span>
+                        <span class="priority-badge-pill priority-badge-p3">Priority 3</span>
+                      </div>
+                      <select class="form-select text-xs" id="seq-bw-p3">
+                        <option value="None">None (No 3rd Backup)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <!-- Column 2: Colour Print Priority Sequence -->
+                  <div class="priority-column-card">
+                    <div class="priority-column-header">
+                      <div class="flex items-center gap-2">
+                        <div class="brand-icon" style="width: 24px; height: 24px; background: linear-gradient(135deg, #ec4899, #8b5cf6, #3b82f6); color: white; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 700;">
+                          CLR
+                        </div>
+                        <h4 style="font-size: 0.95rem; font-weight: 700; margin: 0;">Colour Priority Sequence</h4>
+                      </div>
+                      <span class="badge text-xs" style="background: rgba(124, 58, 237, 0.12); color: var(--primary-700);">Full Colour</span>
+                    </div>
+
+                    <!-- Priority 1 Colour -->
+                    <div class="priority-step-item">
+                      <div class="priority-step-label">
+                        <span>1st Choice (Primary)</span>
+                        <span class="priority-badge-pill priority-badge-p1">Priority 1</span>
+                      </div>
+                      <select class="form-select text-xs" id="seq-color-p1" required>
+                        <option value="None">Scanning connected devices...</option>
+                      </select>
+                    </div>
+
+                    <!-- Priority 2 Colour -->
+                    <div class="priority-step-item">
+                      <div class="priority-step-label">
+                        <span>2nd Choice (Failover / Laser Color)</span>
+                        <span class="priority-badge-pill priority-badge-p2">Priority 2</span>
+                      </div>
+                      <select class="form-select text-xs" id="seq-color-p2">
+                        <option value="None">None (Do Not Failover)</option>
+                      </select>
+                    </div>
+
+                    <!-- Priority 3 Colour -->
+                    <div class="priority-step-item">
+                      <div class="priority-step-label">
+                        <span>3rd Choice (Backup)</span>
+                        <span class="priority-badge-pill priority-badge-p3">Priority 3</span>
+                      </div>
+                      <select class="form-select text-xs" id="seq-color-p3">
+                        <option value="None">None (No 3rd Color Unit)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Sequence Routing Flags & Action -->
+                <div class="flex justify-between items-center" style="margin-top: 1.25rem; flex-wrap: wrap; gap: 1rem;">
+                  <div class="flex items-center gap-4">
+                    <label class="flex items-center gap-2 text-xs" style="cursor: pointer;">
+                      <input type="checkbox" id="seq-auto-failover" checked />
+                      <span>Automatic failover if Priority 1 unit has paper-out or offline</span>
+                    </label>
+                    <label class="flex items-center gap-2 text-xs" style="cursor: pointer;">
+                      <input type="checkbox" id="seq-auto-duplex-match" checked />
+                      <span>Auto-prefer duplex unit for double-sided documents</span>
+                    </label>
+                  </div>
+                  <button type="submit" class="btn btn-primary" id="btn-save-printer-priority">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                    Save Sequence Priority
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <!-- VIEW 4: PROFILE -->
+        <div id="view-profile" class="tab-view-content" style="display: none;">
+          <div class="flex justify-between items-center" style="margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+            <div>
+              <h2 style="margin-bottom: 0.25rem;">User & Store Profile</h2>
+              <p class="text-xs text-muted">Complete your verified Xerox profile and permanent identity QR code.</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="badge badge-under-review" id="profile-completeness-badge">Profile Incomplete</span>
+              <span class="font-mono text-xs font-semibold badge badge-submitted" id="profile-uid-pill">UID: 1000000</span>
+            </div>
+          </div>
+
+          <div class="profile-layout-grid">
+            <!-- Left: Profile Completion Form -->
+            <div class="glass-panel profile-card-main">
+              <div class="profile-card-header">
+                <div class="flex justify-between items-center">
+                  <h3 style="font-size: 1.1rem; font-weight: 700;">Profile Details</h3>
+                  <span class="text-xs text-muted" id="profile-fields-count">0 of 5 completed</span>
+                </div>
+                <!-- Progress Bar -->
+                <div class="profile-progress-track">
+                  <div class="profile-progress-bar" id="profile-progress-bar" style="width: 0%;"></div>
+                </div>
+              </div>
+
+              <form id="center-profile-form" class="profile-form">
+                <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 1.25rem;">
+                  <!-- 1. STORE NAME -->
+                  <div class="form-group">
+                    <label class="form-label" for="profile-store-name">
+                      Store Name <span class="text-error" style="color: var(--error-solid);">*</span>
+                    </label>
+                    <input type="text" id="profile-store-name" class="form-input" required />
+                    <!-- Legacy compatibility anchor -->
+                    <input type="hidden" id="profile-name" />
+                  </div>
+
+                  <!-- 2. USER NAME -->
+                  <div class="form-group">
+                    <label class="form-label" for="profile-user-name">
+                      User Name <span class="text-error" style="color: var(--error-solid);">*</span>
+                    </label>
+                    <input type="text" id="profile-user-name" class="form-input" required />
+                  </div>
+                </div>
+
+                <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 1.25rem;">
+                  <!-- 3. PHONE -->
+                  <div class="form-group">
+                    <label class="form-label" for="profile-phone">
+                      Phone Number <span class="text-error" style="color: var(--error-solid);">*</span>
+                    </label>
+                    <input type="tel" id="profile-phone" class="form-input" required />
+                  </div>
+
+                  <!-- 4. GENDER -->
+                  <div class="form-group">
+                    <label class="form-label" for="profile-gender">
+                      Gender <span class="text-error" style="color: var(--error-solid);">*</span>
+                    </label>
+                    <select id="profile-gender" class="form-select" required>
+                      <option value="">Select Gender</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Other">Other</option>
+                      <option value="Prefer not to say">Prefer not to say</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- 5. ADDRESS -->
+                <div class="form-group">
+                  <label class="form-label" for="profile-address">
+                    Physical Store Address <span class="text-error" style="color: var(--error-solid);">*</span>
+                  </label>
+                  <input type="text" id="profile-address" class="form-input" required />
+                </div>
+
+                <!-- Unique User ID Display -->
+                <div class="form-group">
+                  <label class="form-label">Permanent Unique User ID</label>
+                  <div class="flex items-center gap-2">
+                    <input type="text" id="profile-unique-id-display" class="form-input font-mono font-bold" readonly value="1000000" style="background: var(--bg-surface-subtle);" />
+                    <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-uid" title="Copy Unique ID">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Email is automatically supplied from the login system -->
+                <input type="hidden" id="profile-email" />
+
+                <!-- Account Email & Role Metadata -->
+                <div style="padding-top: 1rem; border-top: 1px solid var(--border-subtle);">
+                  <div>
+                    <span class="text-xs text-muted">Account Email & Role</span>
+                    <div class="flex items-center gap-2" style="margin-top: 0.25rem;">
+                      <span class="text-xs font-semibold" id="profile-user-email">owner@center.com</span>
+                      <span class="badge badge-submitted text-xs" id="profile-user-role">OWNER</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between" style="margin-top: 1.25rem;">
+                  <div class="text-xs text-muted">
+                    Changes reflect immediately in your permanent QR code.
+                  </div>
+                  <button type="submit" class="btn btn-primary" id="btn-save-profile">
+                    Save Profile Details
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <!-- Right: Permanent QR Code Card -->
+            <div class="glass-panel profile-qr-panel">
+              <div class="profile-qr-header text-center">
+                <span class="badge badge-submitted text-xs font-semibold" style="letter-spacing: 0.05em;">PERMANENT PROFILE QR</span>
+                <h3 style="font-size: 1.2rem; margin: 0.5rem 0 0.25rem;" id="qr-display-store-name">SmartPrint Center</h3>
+                <p class="text-xs text-muted" id="qr-display-user-name">User Profile</p>
+              </div>
+
+              <!-- QR Code Frame -->
+              <div class="profile-qr-wrapper">
+                <div class="profile-qr-frame">
+                  <img id="permanent-qr-image" src="" alt="Permanent Profile QR Code" />
+                  <div class="profile-qr-logo-badge">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                  </div>
+                </div>
+                <div class="profile-qr-uid-tag">
+                  <span>UNIQUE ID:</span>
+                  <strong class="font-mono" id="permanent-qr-uid-label">1000000</strong>
+                </div>
+              </div>
+
+              <div class="profile-qr-meta">
+                <div class="meta-item">
+                  <span class="meta-label">Phone:</span>
+                  <span class="meta-val" id="qr-meta-phone">--</span>
+                </div>
+                <div class="meta-item">
+                  <span class="meta-label">Gender:</span>
+                  <span class="meta-val" id="qr-meta-gender">--</span>
+                </div>
+                <div class="meta-item">
+                  <span class="meta-label">Status:</span>
+                  <span class="meta-val" id="qr-meta-status"><span class="badge badge-completed text-xs">Active</span></span>
+                </div>
+              </div>
+
+              <div class="profile-qr-actions">
+                <button type="button" class="btn btn-primary btn-sm w-full" id="btn-print-profile-badge">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                  Print QR Code Standee
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- QR Modal -->
+  <div class="modal-overlay" id="qr-modal" aria-hidden="true">
+    <div class="modal-card">
+      <div class="flex justify-between items-center" style="margin-bottom: 1.25rem;">
+        <h3>Counter QR Code Standee</h3>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('qr-modal').classList.remove('active')">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div id="qr-modal-content">
+        <!-- Rendered by app.js -->
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/assets/js/app.js"></script>
+</body>
+</html>

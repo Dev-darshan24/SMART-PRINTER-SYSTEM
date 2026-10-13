@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Track Print Job — SmartPrint</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/tokens.css">
+  <link rel="stylesheet" href="/assets/css/base.css">
+  <link rel="stylesheet" href="/assets/css/components.css">
+  <link rel="stylesheet" href="/assets/css/customer.css">
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem('smartprint_theme') || 'light';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    })();
+  </script>
+</head>
+<body class="customer-shell">
+  <header class="customer-header">
+    <div class="flex items-center gap-2">
+      <a href="/" class="brand-icon" style="width: 28px; height: 28px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+      </a>
+      <span class="font-bold text-main">SmartPrint Tracking</span>
+    </div>
+    <div class="flex items-center gap-2">
+      <button type="button" class="theme-toggle-btn" id="theme-toggle-btn" aria-label="Toggle Dark / Light Theme" title="Toggle Theme" style="width: 32px; height: 32px;">
+        <span id="theme-icon-moon">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+        </span>
+        <span id="theme-icon-sun" style="display: none;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+        </span>
+      </button>
+      <a href="/customer/" class="btn btn-secondary btn-sm">+ New Print</a>
+    </div>
+  </header>
+
+
+  <main class="customer-main">
+    <div class="glass-panel" style="padding: 1.5rem; text-align: center;">
+      <h1 style="font-size: 1.35rem; margin-bottom: 0.25rem;">Live Job Status</h1>
+      <p class="text-xs text-muted" style="margin-bottom: 1.25rem;">Enter your receipt tracking code to check if your prints are ready.</p>
+
+      <form id="tracking-search-form" class="flex gap-2 justify-center" style="max-width: 420px; margin: 0 auto;">
+        <input type="text" id="tracking-input" class="form-input text-center" placeholder="e.g. XP-8492-9104" style="font-family: var(--font-family-mono); font-weight: 700; text-transform: uppercase;" required />
+        <button type="submit" class="btn btn-primary">Check Status</button>
+      </form>
+    </div>
+
+    <!-- Tracking Timeline Output Slot -->
+    <div id="tracking-result-container"></div>
+  </main>
+
+  <script type="module" src="/assets/js/track.js"></script>
+</body>
+</html>

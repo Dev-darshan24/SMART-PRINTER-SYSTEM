@@ -1,0 +1,5 @@
+{
+    "SHOP_ID": "SHOP_1234",
+    "ENCRYPTION_KEY": "SuperSecretKey",
+    "SERVER_URL": "https://smartprintsystemapp.onrender.com"
+}

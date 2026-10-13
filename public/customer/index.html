@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Upload Document — SmartPrint</title>
+  <meta name="description" content="Quick mobile document printing. Upload your PDF or images and pick up printed sheets from the counter in minutes.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/tokens.css">
+  <link rel="stylesheet" href="/assets/css/base.css">
+  <link rel="stylesheet" href="/assets/css/components.css">
+  <link rel="stylesheet" href="/assets/css/customer.css">
+  <script src="/__env.js"></script>
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem('smartprint_theme') || 'light';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    })();
+  </script>
+</head>
+<body class="customer-shell">
+  <header class="customer-header">
+    <div class="flex items-center gap-2">
+      <div class="brand-icon" style="width: 28px; height: 28px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+      </div>
+      <span class="font-bold text-main">SmartPrint</span>
+    </div>
+    <div class="flex items-center gap-3">
+      <a href="/customer/track.html" class="text-xs font-semibold" style="color: var(--primary-700);">Track Existing Job &rarr;</a>
+      <button type="button" class="theme-toggle-btn" id="theme-toggle-btn" aria-label="Toggle Dark / Light Theme" title="Toggle Theme" style="width: 32px; height: 32px;">
+        <span id="theme-icon-moon">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+        </span>
+        <span id="theme-icon-sun" style="display: none;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+        </span>
+      </button>
+    </div>
+  </header>
+
+
+  <main class="customer-main">
+    <!-- Center Banner -->
+    <div class="center-card-banner">
+      <div class="center-avatar" id="center-avatar-initials">--</div>
+      <div class="center-details" style="flex: 1;">
+        <h1 id="center-name-display">Loading Xerox Center...</h1>
+        <div class="center-address" id="center-address-display">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+          Fetching address...
+        </div>
+        <div style="margin-top: 0.35rem;">
+          <span class="badge badge-submitted text-xs" id="rates-badge">Standard Pricing Active</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Print Submission Form -->
+    <form id="print-submit-form" class="glass-panel" style="padding: 1.75rem;">
+      <div class="flex justify-between items-center" style="flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.25rem;">
+        <h2 style="font-size: 1.25rem; margin: 0;">Upload Printing Material</h2>
+        <span class="badge badge-submitted text-xs font-semibold" id="materials-count-badge">Multiple Files Supported</span>
+      </div>
+      <p class="text-xs text-muted" style="margin-bottom: 1.25rem;">
+        Upload PDFs, Images, Documents, or scan physical sheets directly with your mobile camera.
+      </p>
+
+      <!-- Drag & Drop Zone -->
+      <div class="dropzone" id="file-dropzone" tabindex="0" role="button" aria-label="Drop files here or click to upload">
+        <div class="dropzone-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+        </div>
+        <div class="dropzone-text">
+          <h3>Tap to Browse or Drop Multiple Files</h3>
+          <p>Select PDF, PNG, JPG documents from your phone or PC.</p>
+        </div>
+        <input type="file" id="file-input" multiple accept=".pdf,.png,.jpg,.jpeg,.docx" style="display: none;" />
+        <input type="file" id="camera-input" accept="image/*" capture="environment" style="display: none;" />
+      </div>
+
+      <!-- Quick Actions: Scan via Mobile Camera & Browse -->
+      <div class="materials-actions-bar" style="margin-top: 0.875rem; justify-content: center;">
+        <button type="button" class="btn-scan-mobile" id="btn-mobile-scan" title="Open camera to photograph physical pages">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          Scan via Mobile Camera
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-browse-trigger" style="font-size: 0.8125rem;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          + Add Files
+        </button>
+      </div>
+
+      <!-- File Preview Slot -->
+      <div id="file-preview-container"></div>
+
+      <!-- Print Options Matrix -->
+      <div class="print-options-grid">
+        <!-- Number of Copies -->
+        <div class="option-card">
+          <label class="form-label">Copies</label>
+          <div class="counter-control">
+            <button type="button" class="counter-btn" id="btn-copies-minus" aria-label="Decrease copies">&minus;</button>
+            <span class="counter-value" id="copies-display">1</span>
+            <button type="button" class="counter-btn" id="btn-copies-plus" aria-label="Increase copies">&plus;</button>
+          </div>
+        </div>
+
+        <!-- Paper Size -->
+        <div class="option-card">
+          <label class="form-label" for="paper-size-select">Paper Size</label>
+          <select id="paper-size-select" class="form-select">
+            <option value="A4" selected>A4 (Standard)</option>
+            <option value="A3">A3 (Poster / Drawing)</option>
+            <option value="Legal">Legal (Bond Paper)</option>
+            <option value="Letter">Letter</option>
+          </select>
+        </div>
+
+        <!-- Color Mode -->
+        <div class="option-card">
+          <label class="form-label">Color Mode</label>
+          <div class="segmented-control">
+            <button type="button" class="segmented-btn active" data-color-mode="monochrome">B&W</button>
+            <button type="button" class="segmented-btn" data-color-mode="color">Color</button>
+          </div>
+        </div>
+
+        <!-- Single / Double Sided -->
+        <div class="option-card">
+          <label class="form-label">Sides</label>
+          <div class="segmented-control">
+            <button type="button" class="segmented-btn active" data-duplex="false">1-Sided</button>
+            <button type="button" class="segmented-btn" data-duplex="true">2-Sided</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Optional Special Instructions -->
+      <div class="form-group" style="margin-top: 1.25rem;">
+        <label for="customer-note" class="form-label">Special Instructions (Optional)</label>
+        <input type="text" id="customer-note" class="form-input" placeholder="e.g. Spiral bind, front page on glossy sheet..." />
+      </div>
+
+      <!-- Price Estimate Bar -->
+      <div class="price-estimate-bar">
+        <div>
+          <div class="text-xs text-muted font-medium">Estimated Store Rate</div>
+          <div class="text-xs" style="color: var(--text-light);">Pay directly at the counter</div>
+        </div>
+        <div class="price-estimate-amount" id="estimated-cost-display">₹2.00</div>
+      </div>
+
+      <!-- Submit Action -->
+      <button type="submit" class="btn btn-primary btn-lg w-full" id="btn-submit-job" style="margin-top: 1.25rem;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+        Send to Xerox Queue
+      </button>
+    </form>
+  </main>
+
+  <script type="module" src="/assets/js/customer.js"></script>
+</body>
+</html>

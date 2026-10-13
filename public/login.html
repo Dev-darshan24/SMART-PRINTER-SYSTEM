@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Portal Access & Registration — SmartPrint</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/tokens.css">
+  <link rel="stylesheet" href="/assets/css/base.css">
+  <link rel="stylesheet" href="/assets/css/components.css">
+  <!-- Load server environment variables -->
+  <script src="/__env.js"></script>
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem('smartprint_theme') || 'light';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    })();
+  </script>
+  <style>
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 1.5rem;
+      background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 50%, #fdf4ff 100%);
+      transition: background 0.3s ease;
+    }
+    [data-theme="dark"] body {
+      background: radial-gradient(circle at 50% 0%, rgba(124, 58, 237, 0.16) 0%, #0b0914 80%);
+    }
+    .auth-card {
+      max-width: 460px;
+      width: 100%;
+      padding: 2.25rem;
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-radius: var(--radius-xl, 1.25rem);
+      box-shadow: 0 20px 40px -15px rgba(124, 58, 237, 0.15), 0 0 0 1px rgba(124, 58, 237, 0.1);
+      position: relative;
+    }
+    [data-theme="dark"] .auth-card {
+      background: rgba(20, 17, 36, 0.94);
+      border: 1px solid rgba(167, 139, 250, 0.25);
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8), 0 0 20px rgba(124, 58, 237, 0.15);
+    }
+    .auth-tabs {
+      display: flex;
+      background: rgba(124, 58, 237, 0.06);
+      border-radius: 9999px;
+      padding: 0.25rem;
+      margin-bottom: 1.75rem;
+      border: 1px solid rgba(124, 58, 237, 0.12);
+    }
+    [data-theme="dark"] .auth-tabs {
+      background: rgba(124, 58, 237, 0.16);
+      border-color: rgba(167, 139, 250, 0.2);
+    }
+    .auth-tab-btn {
+      flex: 1;
+      padding: 0.625rem 1rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--text-muted, #64748b);
+      background: transparent;
+      border: none;
+      border-radius: 9999px;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      text-align: center;
+    }
+    .auth-tab-btn.active {
+      background: #ffffff;
+      color: var(--primary-700, #6d28d9);
+      box-shadow: 0 4px 12px rgba(124, 58, 237, 0.12);
+    }
+    [data-theme="dark"] .auth-tab-btn.active {
+      background: #251e3e;
+      color: #ffffff;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+    .social-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      width: 100%;
+      padding: 0.75rem 1rem;
+      background: #ffffff;
+      border: 1px solid rgba(0, 0, 0, 0.12);
+      border-radius: var(--radius-md, 0.625rem);
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #1e293b;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+    }
+    .social-btn:hover {
+      background: #f8fafc;
+      border-color: rgba(124, 58, 237, 0.3);
+      box-shadow: 0 4px 12px rgba(124, 58, 237, 0.08);
+      transform: translateY(-1px);
+    }
+    [data-theme="dark"] .social-btn {
+      background: #17132a;
+      border-color: rgba(167, 139, 250, 0.22);
+      color: #f8fafc;
+    }
+    [data-theme="dark"] .social-btn:hover {
+      background: #231c3d;
+      border-color: var(--primary-400);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+    .auth-divider {
+      display: flex;
+      align-items: center;
+      margin: 1.25rem 0;
+      color: var(--text-muted, #94a3b8);
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .auth-divider::before,
+    .auth-divider::after {
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: rgba(0, 0, 0, 0.08);
+    }
+    [data-theme="dark"] .auth-divider::before,
+    [data-theme="dark"] .auth-divider::after {
+      background: rgba(167, 139, 250, 0.16);
+    }
+    .auth-divider span {
+      padding: 0 0.75rem;
+    }
+    .input-wrapper {
+      position: relative;
+    }
+    .password-toggle-btn {
+      position: absolute;
+      right: 0.75rem;
+      top: 50%;
+      transform: translateY(-50%);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      color: var(--text-muted, #94a3b8);
+      padding: 0.25rem;
+      display: flex;
+      align-items: center;
+    }
+    .password-toggle-btn:hover {
+      color: var(--primary-600, #7c3aed);
+    }
+    .auth-theme-toggle {
+      position: absolute;
+      top: 1.25rem;
+      right: 1.25rem;
+      background: transparent;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      width: 32px;
+      height: 32px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+    .auth-theme-toggle:hover {
+      background: var(--primary-100);
+      color: var(--primary-800);
+    }
+    [data-theme="dark"] .auth-theme-toggle {
+      border-color: rgba(167, 139, 250, 0.25);
+      color: #fbbf24;
+    }
+    [data-theme="dark"] .auth-theme-toggle:hover {
+      background: rgba(251, 191, 36, 0.15);
+      color: #fde047;
+    }
+  </style>
+</head>
+<body>
+  <div class="auth-card">
+    <button type="button" class="auth-theme-toggle" id="auth-theme-toggle" aria-label="Toggle Dark / Light Theme" title="Toggle Theme">
+      <svg id="auth-sun-icon" style="display: none;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+      <svg id="auth-moon-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+    </button>
+
+    <!-- Header -->
+    <div class="text-center" style="margin-bottom: 1.75rem;">
+      <a href="/" class="brand-logo justify-center" style="margin-bottom: 0.75rem; display: inline-flex;">
+        <div class="brand-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+        </div>
+        <span style="font-size: 1.35rem; font-weight: 800; letter-spacing: -0.02em;">SmartPrint</span>
+      </a>
+      <h2 id="auth-heading" style="font-size: 1.35rem; font-weight: 700; margin-bottom: 0.25rem;">Management Sign In</h2>
+      <p id="auth-subheading" class="text-sm text-muted">Access your Xerox center portal or platform administration.</p>
+    </div>
+
+    <!-- Mode Tabs -->
+    <div class="auth-tabs" role="tablist">
+      <button type="button" class="auth-tab-btn active" id="tab-login" role="tab" aria-selected="true">Sign In</button>
+      <button type="button" class="auth-tab-btn" id="tab-register" role="tab" aria-selected="false">Create Account</button>
+    </div>
+
+    <!-- Google Authentication Button -->
+    <button type="button" class="social-btn" id="google-auth-btn">
+      <svg width="18" height="18" viewBox="0 0 24 24">
+        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+      </svg>
+      <span id="google-btn-text">Continue with Google</span>
+    </button>
+
+    <div class="auth-divider">
+      <span id="divider-text">Or with email</span>
+    </div>
+
+    <!-- FORM 1: SIGN IN -->
+    <form id="form-login">
+      <div class="form-group">
+        <label for="login-email" class="form-label">Email Address</label>
+        <input type="email" id="login-email" class="form-input" placeholder="owner@center.com" required autocomplete="email" />
+      </div>
+
+      <div class="form-group">
+        <div class="flex justify-between items-center" style="margin-bottom: 0.35rem;">
+          <label for="login-password" class="form-label" style="margin-bottom: 0;">Password</label>
+          <a href="/forgot-password.html" class="text-xs" style="color: var(--primary-600); font-weight: 500;">Forgot password?</a>
+        </div>
+        <div class="input-wrapper">
+          <input type="password" id="login-password" class="form-input" placeholder="••••••••" required autocomplete="current-password" />
+          <button type="button" class="password-toggle-btn" data-target="login-password" aria-label="Toggle password visibility">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+          </button>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary w-full" style="margin-top: 0.5rem;" id="login-submit-btn">
+        Sign In to Portal
+      </button>
+    </form>
+
+    <!-- FORM 2: REGISTER CENTER -->
+    <form id="form-register" style="display: none;">
+      <div class="form-group">
+        <label for="reg-center-name" class="form-label">Center / Shop Name</label>
+        <input type="text" id="reg-center-name" class="form-input" placeholder="e.g. Campus Print Hub" required autocomplete="organization" />
+      </div>
+
+      <div class="form-group">
+        <label for="reg-owner-name" class="form-label">Owner Full Name</label>
+        <input type="text" id="reg-owner-name" class="form-input" placeholder="e.g. Store Owner" required autocomplete="name" />
+      </div>
+
+      <div class="form-group">
+        <label for="reg-email" class="form-label">Business Email</label>
+        <input type="email" id="reg-email" class="form-input" placeholder="owner@printcenter.com" required autocomplete="email" />
+      </div>
+
+      <div class="form-group">
+        <label for="reg-password" class="form-label">Create Password (Min 6 chars)</label>
+        <div class="input-wrapper">
+          <input type="password" id="reg-password" class="form-input" placeholder="••••••••" required minlength="6" autocomplete="new-password" />
+          <button type="button" class="password-toggle-btn" data-target="reg-password" aria-label="Toggle password visibility">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+          </button>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary w-full" style="margin-top: 0.5rem;" id="register-submit-btn">
+        Create Center Account
+      </button>
+
+      <p class="text-xs text-muted text-center" style="margin-top: 0.75rem; line-height: 1.4;">
+        By creating an account, you agree to our 24-hr privacy deletion policy and terms.
+      </p>
+    </form>
+
+    <!-- Footer Back Link -->
+    <div class="text-center" style="margin-top: 1.5rem; font-size: 0.8125rem;">
+      <a href="/" class="text-muted" style="text-decoration: none; display: inline-flex; align-items: center; gap: 0.35rem;">
+        &larr; Back to Home
+      </a>
+    </div>
+  </div>
+
+  <script type="module">
+    import { authManager, ROLES } from '/assets/js/auth/authManager.js';
+    import { showToast } from '/assets/js/ui.js';
+
+    // Check if already authenticated; if so, redirect immediately
+    const existingUser = authManager.getCurrentUser();
+    const urlParams = new URLSearchParams(window.location.search);
+    const redirectUrl = urlParams.get('redirect');
+
+    if (existingUser && existingUser.uid) {
+      if (redirectUrl) {
+        window.location.replace(redirectUrl);
+      } else if (existingUser.role === ROLES.SUPERADMIN) {
+        window.location.replace('/admin/');
+      } else {
+        window.location.replace('/app/');
+      }
+    }
+
+    // Tab Switching
+    const tabLogin = document.getElementById('tab-login');
+    const tabRegister = document.getElementById('tab-register');
+    const formLogin = document.getElementById('form-login');
+    const formRegister = document.getElementById('form-register');
+    const heading = document.getElementById('auth-heading');
+    const subheading = document.getElementById('auth-subheading');
+    const googleBtnText = document.getElementById('google-btn-text');
+    const dividerText = document.getElementById('divider-text');
+
+    function switchTab(mode) {
+      if (mode === 'register') {
+        tabRegister.classList.add('active');
+        tabRegister.setAttribute('aria-selected', 'true');
+        tabLogin.classList.remove('active');
+        tabLogin.setAttribute('aria-selected', 'false');
+        formLogin.style.display = 'none';
+        formRegister.style.display = 'block';
+        heading.textContent = 'Register New Center';
+        subheading.textContent = 'Set up your Xerox center and start receiving digital print orders.';
+        googleBtnText.textContent = 'Sign up with Google';
+        dividerText.textContent = 'Or register with email';
+      } else {
+        tabLogin.classList.add('active');
+        tabLogin.setAttribute('aria-selected', 'true');
+        tabRegister.classList.remove('active');
+        tabRegister.setAttribute('aria-selected', 'false');
+        formLogin.style.display = 'block';
+        formRegister.style.display = 'none';
+        heading.textContent = 'Management Sign In';
+        subheading.textContent = 'Access your Xerox center portal or platform administration.';
+        googleBtnText.textContent = 'Continue with Google';
+        dividerText.textContent = 'Or with email';
+      }
+    }
+
+    tabLogin.addEventListener('click', () => switchTab('login'));
+    tabRegister.addEventListener('click', () => switchTab('register'));
+
+    // Check URL mode query (?mode=register)
+    if (urlParams.get('mode') === 'register') {
+      switchTab('register');
+    }
+
+    // Password visibility toggles
+    document.querySelectorAll('.password-toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const targetId = btn.getAttribute('data-target');
+        const input = document.getElementById(targetId);
+        if (input) {
+          const isPass = input.type === 'password';
+          input.type = isPass ? 'text' : 'password';
+          btn.innerHTML = isPass
+            ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><path d="M1 12s4-8 11-8a9.77 9.77 0 0 1 3.16.51"></path></svg>'
+            : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
+        }
+      });
+    });
+
+    function navigateUser(user) {
+      if (redirectUrl) {
+        window.location.replace(redirectUrl);
+      } else if (user.role === ROLES.SUPERADMIN) {
+        window.location.replace('/admin/');
+      } else {
+        window.location.replace('/app/');
+      }
+    }
+
+    // Google Sign-In / Register
+    const googleBtn = document.getElementById('google-auth-btn');
+    googleBtn.addEventListener('click', async () => {
+      googleBtn.disabled = true;
+      googleBtn.style.opacity = '0.7';
+      try {
+        const user = await authManager.loginWithGoogle();
+        showToast("Authenticated with Google successfully!", "success");
+        setTimeout(() => navigateUser(user), 400);
+      } catch (err) {
+        showToast(err.message, "error");
+        googleBtn.disabled = false;
+        googleBtn.style.opacity = '1';
+      }
+    });
+
+    // Email/Password Login
+    formLogin.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('login-email').value;
+      const pass = document.getElementById('login-password').value;
+      const submitBtn = document.getElementById('login-submit-btn');
+
+      submitBtn.disabled = true;
+      submitBtn.innerText = "Signing in...";
+
+      try {
+        const user = await authManager.login(email, pass);
+        showToast("Signed in successfully!", "success");
+        setTimeout(() => navigateUser(user), 400);
+      } catch (err) {
+        showToast(err.message, "error");
+        submitBtn.disabled = false;
+        submitBtn.innerText = "Sign In to Portal";
+      }
+    });
+
+    // Center Registration
+    formRegister.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const centerName = document.getElementById('reg-center-name').value;
+      const fullName = document.getElementById('reg-owner-name').value;
+      const email = document.getElementById('reg-email').value;
+      const password = document.getElementById('reg-password').value;
+      const submitBtn = document.getElementById('register-submit-btn');
+
+      submitBtn.disabled = true;
+      submitBtn.innerText = "Creating center account...";
+
+      try {
+        const user = await authManager.register({ centerName, fullName, email, password });
+        showToast("Account created successfully! Welcome to SmartPrint.", "success");
+        setTimeout(() => navigateUser(user), 500);
+      } catch (err) {
+        showToast(err.message, "error");
+        submitBtn.disabled = false;
+        submitBtn.innerText = "Create Center Account";
+      }
+    });
+
+    // Dark / Light Theme Toggle on Auth Card
+    const authThemeToggle = document.getElementById('auth-theme-toggle');
+    const authSunIcon = document.getElementById('auth-sun-icon');
+    const authMoonIcon = document.getElementById('auth-moon-icon');
+
+    function syncAuthTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem('smartprint_theme', theme);
+      if (theme === 'dark') {
+        if (authSunIcon) authSunIcon.style.display = 'inline-flex';
+        if (authMoonIcon) authMoonIcon.style.display = 'none';
+      } else {
+        if (authSunIcon) authSunIcon.style.display = 'none';
+        if (authMoonIcon) authMoonIcon.style.display = 'inline-flex';
+      }
+    }
+
+    const currentTheme = localStorage.getItem('smartprint_theme') || 'light';
+    syncAuthTheme(currentTheme);
+
+    authThemeToggle?.addEventListener('click', () => {
+      const active = document.documentElement.getAttribute('data-theme') || 'light';
+      const next = active === 'dark' ? 'light' : 'dark';
+      syncAuthTheme(next);
+    });
+  </script>
+</body>
+
+</html>

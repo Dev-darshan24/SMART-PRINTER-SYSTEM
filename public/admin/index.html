@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Superadmin Overview — SmartPrint Platform</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/tokens.css">
+  <link rel="stylesheet" href="/assets/css/base.css">
+  <link rel="stylesheet" href="/assets/css/components.css">
+  <link rel="stylesheet" href="/assets/css/dashboard.css">
+  <script src="/__env.js"></script>
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem('smartprint_theme') || 'light';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    })();
+  </script>
+  <script type="module">
+    import { authManager, ROLES } from '/assets/js/auth/authManager.js';
+    const user = authManager.getCurrentUser();
+    if (!user || user.role !== ROLES.SUPERADMIN) {
+      window.location.replace('/login.html?redirect=' + encodeURIComponent(window.location.pathname));
+    }
+  </script>
+</head>
+
+<body>
+  <div class="app-layout">
+    <!-- Sidebar -->
+    <aside class="app-sidebar">
+      <div class="sidebar-header">
+        <a href="/admin/" class="brand-logo">
+          <div class="brand-icon" style="background: linear-gradient(135deg, #1e1b4b 0%, var(--primary-700) 100%);">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+          </div>
+          <span>Platform Admin</span>
+        </a>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section-title">Platform</div>
+        <a href="/admin/" class="nav-item active">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+          <span>Overview</span>
+        </a>
+        <a href="#centers-section" class="nav-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
+          <span>Centers Directory</span>
+        </a>
+        <a href="#plans-section" class="nav-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>
+          <span>Subscription Plans</span>
+        </a>
+        <a href="#audit-section" class="nav-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          <span>Audit Logs</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-profile-badge">
+          <div class="user-avatar" style="background: var(--primary-700); color: white;">SA</div>
+          <div class="user-info">
+            <span class="user-name">Super Administrator</span>
+            <span class="user-role">admin@smartprint.io</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Workspace -->
+    <main class="app-main">
+      <header class="app-topbar">
+        <div class="breadcrumb-trail">
+          <span>Superadmin</span>
+          <span>/</span>
+          <span class="breadcrumb-current">Platform Health</span>
+        </div>
+
+        <div class="topbar-actions">
+          <button type="button" class="theme-toggle-btn" id="theme-toggle-btn" aria-label="Toggle Dark / Light Theme" title="Toggle Theme">
+            <span id="theme-icon-moon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+              </svg>
+            </span>
+            <span id="theme-icon-sun" style="display: none;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="5"></circle>
+                <line x1="12" y1="1" x2="12" y2="3"></line>
+                <line x1="12" y1="21" x2="12" y2="23"></line>
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                <line x1="1" y1="12" x2="3" y2="12"></line>
+                <line x1="21" y1="12" x2="23" y2="12"></line>
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+              </svg>
+            </span>
+          </button>
+          <button class="btn btn-primary btn-sm" id="btn-open-provision">
+
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            Provision Center
+          </button>
+          <button class="btn btn-ghost btn-sm" id="admin-logout-btn" title="Sign Out">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="workspace-content">
+        <!-- KPI Row -->
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-header">
+              <span class="kpi-label">Registered Centers</span>
+              <div class="kpi-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
+              </div>
+            </div>
+            <div class="kpi-value" id="admin-stat-centers">0</div>
+            <span class="kpi-subtext">Active Xerox franchises</span>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-header">
+              <span class="kpi-label">Active Subscriptions</span>
+              <div class="kpi-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              </div>
+            </div>
+            <div class="kpi-value" id="admin-stat-active">0</div>
+            <span class="kpi-subtext">Razorpay billing active</span>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-header">
+              <span class="kpi-label">Platform MRR</span>
+              <div class="kpi-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+              </div>
+            </div>
+            <div class="kpi-value" id="admin-stat-mrr">₹0</div>
+            <span class="kpi-subtext">Monthly Recurring Revenue</span>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-header">
+              <span class="kpi-label">Jobs Processed</span>
+              <div class="kpi-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+              </div>
+            </div>
+            <div class="kpi-value" id="admin-stat-jobs">0</div>
+            <span class="kpi-subtext">All-time print jobs</span>
+          </div>
+        </div>
+
+        <!-- Centers Section -->
+        <div id="centers-section" style="margin-bottom: 2.5rem;">
+          <div class="flex justify-between items-center" style="margin-bottom: 1rem;">
+            <h2>Managed Xerox Centers</h2>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Center Name & Address</th>
+                  <th>Public ID</th>
+                  <th>Owner Contact</th>
+                  <th>Status</th>
+                  <th>Subscription</th>
+                  <th class="text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody id="centers-table-body">
+                <!-- Dynamically rendered -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Plans Section -->
+        <div id="plans-section" style="margin-bottom: 2.5rem;">
+          <div class="flex justify-between items-center" style="margin-bottom: 1rem;">
+            <h2>Subscription Tiers (Razorpay)</h2>
+          </div>
+          <div class="grid" id="plans-grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem;">
+            <!-- Dynamically rendered -->
+          </div>
+        </div>
+
+        <!-- Audit Logs Section -->
+        <div id="audit-section">
+          <div class="flex justify-between items-center" style="margin-bottom: 1rem;">
+            <h2>Audit & Compliance Log</h2>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th>Actor UID</th>
+                  <th>Metadata</th>
+                  <th class="text-right">Timestamp</th>
+                </tr>
+              </thead>
+              <tbody id="audit-table-body">
+                <!-- Dynamically rendered -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Provision Center Modal -->
+  <div class="modal-overlay" id="provision-modal" aria-hidden="true">
+    <div class="modal-card">
+      <div class="flex justify-between items-center" style="margin-bottom: 1.25rem;">
+        <h3>Provision Xerox Center</h3>
+        <button class="btn btn-ghost btn-sm" id="btn-close-provision">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+
+      <form id="form-provision-center">
+        <div class="form-group">
+          <label class="form-label" for="new-center-name">Center Name</label>
+          <input type="text" class="form-input" id="new-center-name" placeholder="e.g. Metro Xerox & Print" required />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="new-owner-email">Owner Email (Credentials issued)</label>
+          <input type="email" class="form-input" id="new-owner-email" placeholder="owner@metropoint.com" required />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="new-center-address">Shop Address</label>
+          <input type="text" class="form-input" id="new-center-address" placeholder="Store address, floor, locality..." />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="new-center-phone">Phone Number</label>
+          <input type="tel" class="form-input" id="new-center-phone" placeholder="+91 98765 00000" />
+        </div>
+
+        <div class="flex justify-between items-center" style="margin-top: 1.5rem;">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('provision-modal').classList.remove('active')">
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-primary">
+            Provision & Create Owner
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="/assets/js/admin.js"></script>
+</body>
+</html>

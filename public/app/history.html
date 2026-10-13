@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SmartPrint — Total Orders History</title>
+  <meta name="description" content="View complete past print job history, track orders, and export reports." />
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="/assets/css/tokens.css" />
+  <link rel="stylesheet" href="/assets/css/base.css" />
+  <link rel="stylesheet" href="/assets/css/components.css" />
+  <link rel="stylesheet" href="/assets/css/dashboard.css" />
+  <script src="/__env.js"></script>
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem('smartprint_theme') || 'light';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    })();
+  </script>
+  <script type="module">
+    import { authManager, ROLES } from '/assets/js/auth/authManager.js';
+    const user = authManager.getCurrentUser();
+    if (!user || (user.role !== ROLES.OWNER && user.role !== ROLES.SUPERADMIN)) {
+      window.location.replace('/login.html?redirect=' + encodeURIComponent(window.location.pathname));
+    }
+  </script>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Slide Bar (Sidebar) -->
+    <aside class="app-sidebar" id="app-sidebar" aria-label="Main Navigation">
+      <div class="sidebar-header">
+        <a href="/app/index.html" class="brand-logo">
+          <div class="brand-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+          </div>
+          <span>SmartPrint</span>
+        </a>
+        <button type="button" class="sidebar-hide-btn" id="sidebar-hide-btn" aria-label="Toggle Slide Bar" title="Toggle Slide Bar">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="18" height="18" x="3" y="3" rx="3"></rect>
+            <path d="M9 3v18"></path>
+          </svg>
+        </button>
+      </div>
+
+      <nav class="sidebar-nav">
+        <!-- 1. Dashboard -->
+        <a href="/app/index.html" class="nav-item sidebar-tab-btn" data-view="dashboard" id="nav-btn-dashboard">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+          <span>Dashboard</span>
+        </a>
+
+        <!-- 2. History -->
+        <a href="/app/history.html" class="nav-item active sidebar-tab-btn" data-view="history" id="nav-btn-history">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          <span>History</span>
+        </a>
+
+        <!-- 3. Analytics -->
+        <a href="/app/analytics.html" class="nav-item sidebar-tab-btn" data-view="analytics" id="nav-btn-analytics">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="20" x2="18" y2="10"></line>
+            <line x1="12" y1="20" x2="12" y2="4"></line>
+            <line x1="6" y1="20" x2="6" y2="14"></line>
+          </svg>
+          <span>Analytics</span>
+        </a>
+
+        <!-- 4. Setting -->
+        <a href="/app/settings.html" class="nav-item sidebar-tab-btn" data-view="settings" id="nav-btn-settings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          <span>Setting</span>
+        </a>
+
+        <!-- 5. Profile -->
+        <a href="/app/profile.html" class="nav-item sidebar-tab-btn" data-view="profile" id="nav-btn-profile">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+          <span>Profile</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-profile-badge">
+          <div class="user-avatar" id="user-avatar-initials">--</div>
+          <div class="user-info">
+            <span class="user-name" id="current-center-name">Loading center...</span>
+            <span class="user-role" id="current-user-email">owner@center.com</span>
+          </div>
+        </div>
+        <button type="button" class="sidebar-logout-btn" id="logout-btn" title="Sign Out" aria-label="Sign Out">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+            <polyline points="16 17 21 12 16 7"></polyline>
+            <line x1="21" y1="12" x2="9" y2="12"></line>
+          </svg>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Slide Bar Mobile Backdrop -->
+    <div class="sidebar-backdrop" id="sidebar-backdrop" aria-hidden="true"></div>
+
+    <!-- Main Workspace -->
+    <main class="app-main">
+      <header class="app-topbar">
+        <div class="topbar-left">
+          <button type="button" class="btn-sidebar-toggle" id="sidebar-toggle-btn" aria-label="Toggle navigation slide bar" aria-controls="app-sidebar" aria-expanded="true" title="Toggle Slide Bar">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect width="18" height="18" x="3" y="3" rx="3"></rect>
+              <path d="M9 3v18"></path>
+            </svg>
+          </button>
+          <div class="breadcrumb-trail">
+            <span>SmartPrint</span>
+            <span>/</span>
+            <span class="breadcrumb-current" id="view-title-breadcrumb">History</span>
+          </div>
+        </div>
+
+        <div class="topbar-actions">
+          <!-- Small Dark / Light Theme Toggle Button -->
+          <button type="button" class="theme-toggle-btn" id="theme-toggle-btn" aria-label="Toggle Dark / Light Theme" title="Toggle Dark/Light Theme">
+            <span id="theme-icon-moon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+              </svg>
+            </span>
+            <span id="theme-icon-sun" style="display: none;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="5"></circle>
+                <line x1="12" y1="1" x2="12" y2="3"></line>
+                <line x1="12" y1="21" x2="12" y2="23"></line>
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                <line x1="1" y1="12" x2="3" y2="12"></line>
+                <line x1="21" y1="12" x2="23" y2="12"></line>
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+              </svg>
+            </span>
+          </button>
+
+          <a href="#" target="_blank" class="btn btn-secondary btn-sm" id="topbar-customer-link" style="display: none;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+            Open Customer Page
+          </a>
+        </div>
+      </header>
+
+      <div class="workspace-content">
+        <!-- VIEW 2: HISTORY -->
+        <div id="view-history" class="tab-view-content" style="display: block;">
+          <div class="flex justify-between items-center" style="margin-bottom: 1.25rem;">
+            <div class="flex items-center gap-2">
+              <h2>Total Orders History</h2>
+              <span class="badge" id="history-total-badge" style="background: var(--primary-100); color: var(--primary-700); font-size: 0.8rem; font-weight: 600;">0 Orders</span>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="window.print()">Export History Report</button>
+          </div>
+
+          <!-- History Date Filter Bar -->
+          <div class="filter-bar" style="margin-bottom: 1rem;">
+            <div class="filter-tabs" id="history-filter-tabs">
+              <button class="filter-tab active history-filter-btn" data-range="all">
+                All Orders <span class="tab-count" id="history-count-all">0</span>
+              </button>
+              <button class="filter-tab history-filter-btn" data-range="today">
+                Today <span class="tab-count" id="history-count-today">0</span>
+              </button>
+              <button class="filter-tab history-filter-btn" data-range="7days">
+                Last 7 Days <span class="tab-count" id="history-count-7days">0</span>
+              </button>
+              <button class="filter-tab history-filter-btn" data-range="3months">
+                3 Months <span class="tab-count" id="history-count-3months">0</span>
+              </button>
+              <button class="filter-tab history-filter-btn" data-range="6months">
+                6 Months <span class="tab-count" id="history-count-6months">0</span>
+              </button>
+              <button class="filter-tab history-filter-btn" data-range="1year" id="history-tab-year" title="Annual Year Cycle (2026 - 2027)">
+                <span id="history-year-tab-label">2026 - 2027</span> <span class="tab-count" id="history-count-1year">0</span>
+              </button>
+            </div>
+            <div class="flex items-center gap-2">
+              <input type="text" class="form-input text-xs" placeholder="Search history..." id="search-history-input" style="width: 200px;" />
+            </div>
+          </div>
+
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Document</th>
+                  <th>Tracking Token</th>
+                  <th>Pages & Copies</th>
+                  <th>Options</th>
+                  <th>Total Cost</th>
+                  <th>Date & Time</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="history-table-body">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- History Retention Subtext -->
+          <div class="flex justify-between items-center" style="margin-top: 0.75rem; padding: 0.25rem 0.5rem;">
+            <span class="text-xs text-muted" id="history-filter-subtext">Showing all orders &bull; Orders older than 1 year are automatically deleted</span>
+            <span class="badge" style="background: var(--bg-surface-subtle); color: var(--text-muted); font-size: 0.75rem;">1-Year Auto-Delete Active</span>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script type="module" src="/assets/js/app.js"></script>
+</body>
+</html>

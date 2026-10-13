@@ -1,0 +1,26 @@
+{
+  "name": "smartprint-system",
+  "version": "1.0.0",
+  "description": "Multi-tenant Xerox Center Management System with QR upload and live queue",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node --test tests/",
+    "emulators": "firebase emulators:start",
+    "deploy": "firebase deploy"
+  },
+  "keywords": [
+    "xerox",
+    "photocopy",
+    "print-management",
+    "firebase",
+    "qr-print",
+    "saas"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "firebase": "^13.0.0"
+  }
+}

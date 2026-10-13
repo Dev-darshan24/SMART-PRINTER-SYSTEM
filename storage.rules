@@ -1,0 +1,36 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Deny all by default
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isSuperadmin() {
+      return isAuthenticated() && request.auth.token.role == 'superadmin';
+    }
+
+    function isOwnerOf(centerId) {
+      return isAuthenticated() && request.auth.token.role == 'owner' && request.auth.token.centerId == centerId;
+    }
+
+    // Tenant-isolated customer uploads
+    match /customer-uploads/{centerId}/{jobId}/{fileName} {
+      // Only the assigned Xerox Center Owner or Superadmin can download/preview customer files
+      allow read: if isSuperadmin() || isOwnerOf(centerId);
+      
+      // Upload rules: max 25MB, only allowed MIME types
+      allow create: if request.resource.size < 25 * 1024 * 1024
+                    && (request.resource.contentType.matches('application/pdf')
+                        || request.resource.contentType.matches('image/png')
+                        || request.resource.contentType.matches('image/jpeg'));
+                        
+      allow update, delete: if isSuperadmin();
+    }
+  }
+}

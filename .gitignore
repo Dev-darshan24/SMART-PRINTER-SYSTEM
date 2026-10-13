@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+.firebaserc
+*.pem
+*.key
+
+# Firebase
+firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+ui-debug.log
+.firebase/
+
+# Build and temporary files
+temp/
+*.tmp
+*.log
+
+# System files
+.DS_Store
+Thumbs.db
