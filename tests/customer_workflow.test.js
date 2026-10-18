@@ -90,4 +90,26 @@ describe("SmartPrint — Customer QR Upload, Mobile Scan & Priority Failover Ver
     assert.strictEqual(js.includes("routedPrinter"), true, "track.js must show routedPrinter.");
     assert.strictEqual(js.includes("Failover"), true, "track.js must show Failover pill when applicable.");
   });
+
+  it("verifies customer page shows print options when Store is Open, and displays friendly visit later card when Closed", () => {
+    const html = fs.readFileSync(customerHtmlPath, "utf-8");
+    const js = fs.readFileSync(customerJsPath, "utf-8");
+    const apiJs = fs.readFileSync(apiJsPath, "utf-8");
+
+    // HTML elements
+    assert.strictEqual(html.includes('id="store-closed-view"'), true, "customer/index.html must contain #store-closed-view.");
+    assert.strictEqual(html.includes('id="store-live-status-pill"'), true, "customer/index.html must contain #store-live-status-pill.");
+    assert.strictEqual(html.includes("Store is Currently Closed"), true, "customer/index.html must contain Closed message.");
+    assert.strictEqual(html.includes("Please visit after some time"), true, "customer/index.html must contain visit after some time message.");
+    assert.strictEqual(html.includes('id="btn-check-store-status"'), true, "customer/index.html must provide #btn-check-store-status Check Again button.");
+
+    // Customer JS toggling logic
+    assert.strictEqual(js.includes("isStoreClosed"), true, "customer.js must detect isStoreClosed.");
+    assert.strictEqual(js.includes("store-closed-view"), true, "customer.js must toggle store-closed-view.");
+    assert.strictEqual(js.includes("store-live-status-pill"), true, "customer.js must update store-live-status-pill.");
+    assert.strictEqual(js.includes("btn-check-store-status"), true, "customer.js must handle Check Again button click.");
+
+    // API protection
+    assert.strictEqual(apiJs.includes("FAILED_PRECONDITION: This print center is currently closed"), true, "api.js must reject submissions when center is closed.");
+  });
 });

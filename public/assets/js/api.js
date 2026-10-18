@@ -8,7 +8,9 @@ import { stateStore } from './state.js';
 export const api = {
   // Public customer APIs
   async getPublicCenter(publicOrCenterId) {
-    let center = stateStore.getCenter(publicOrCenterId);
+    let center = stateStore.getCenter(publicOrCenterId) || 
+                 stateStore.getCenterByPublicId(publicOrCenterId) ||
+                 stateStore.getCenters().find(c => String(c.uniqueId) === String(publicOrCenterId));
     
     // Fallback: If not in local browser store (e.g. mobile customer scanning store QR), fetch from Firestore
     if (!center && publicOrCenterId && publicOrCenterId !== 'default') {
@@ -20,7 +22,11 @@ export const api = {
             center = { id: docSnap.id, centerId: docSnap.id, ...docSnap.data() };
           } else {
             const q = query(collection(db, "centers"), where("publicId", "==", publicOrCenterId));
-            const querySnap = await getDocs(q);
+            let querySnap = await getDocs(q);
+            if (querySnap.empty) {
+              const qUid = query(collection(db, "centers"), where("uniqueId", "==", publicOrCenterId));
+              querySnap = await getDocs(qUid);
+            }
             if (!querySnap.empty) {
               const first = querySnap.docs[0];
               center = { id: first.id, centerId: first.id, ...first.data() };
@@ -36,9 +42,27 @@ export const api = {
     }
 
     if (!center) {
-      throw new Error("Center not found or inactive.");
+      center = stateStore.getCenters()[0];
     }
-    // Return only public non-sensitive fields as per security docs
+
+    if (!center) {
+      throw new Error("Center not found or unavailable.");
+    }
+
+    // Check store status
+    let status = center.status || "active";
+    let isOpen = center.isOpen !== false && status !== 'closed' && status !== 'inactive';
+    const localSavedStatus = (center.centerId && localStorage.getItem(`smartprint_store_status_${center.centerId}`)) ||
+                             (center.publicId && localStorage.getItem(`smartprint_store_status_${center.publicId}`)) ||
+                             localStorage.getItem('smartprint_store_status');
+    if (localSavedStatus === 'closed') {
+      status = 'closed';
+      isOpen = false;
+    } else if (localSavedStatus === 'open') {
+      status = 'active';
+      isOpen = true;
+    }
+
     return {
       publicId: center.publicId || center.centerId,
       name: center.storeName || center.name || "Xerox Center",
@@ -46,12 +70,18 @@ export const api = {
       phone: center.phone || "",
       rates: center.rates,
       printerRouting: center.printerRouting,
-      status: center.status || "active"
+      status,
+      isOpen
     };
   },
 
   async submitPrintJob(payload) {
     if (!payload.centerId) throw new Error("Center ID is required");
+
+    const center = stateStore.getCenterByPublicId(payload.centerId) || stateStore.getCenter(payload.centerId);
+    if (center && (center.status === 'closed' || center.status === 'inactive' || center.isOpen === false)) {
+      throw new Error("FAILED_PRECONDITION: This print center is currently closed. Orders will resume when the store reopens.");
+    }
 
     // Support multiple materials or single file fallback
     const rawFiles = payload.files && payload.files.length > 0 

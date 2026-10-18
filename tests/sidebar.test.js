@@ -148,7 +148,28 @@ describe("SmartPrint — Slide Bar & Navigation Layout Verification", () => {
       assert.strictEqual(content.includes(`id="${viewId}"`), true, `${file} must contain #${viewId}.`);
       assert.strictEqual(content.includes('id="logout-btn"'), true, `${file} must contain #logout-btn in sidebar footer.`);
       assert.strictEqual(content.includes('id="theme-toggle-btn"'), true, `${file} must contain #theme-toggle-btn in topbar.`);
+      assert.strictEqual(content.includes('id="store-status-btn"'), true, `${file} must contain #store-status-btn on navbar.`);
+      assert.strictEqual(content.includes('id="store-status-text"'), true, `${file} must contain #store-status-text on navbar.`);
     });
+  });
+
+  it("verifies store open/closed status button exists on navbar and handles store status toggling", () => {
+    const js = fs.readFileSync(jsPath, "utf-8");
+    const css = fs.readFileSync(cssPath, "utf-8");
+
+    // CSS styles
+    assert.strictEqual(css.includes(".store-status-btn"), true, "dashboard.css must style .store-status-btn.");
+    assert.strictEqual(css.includes(".store-status-dot"), true, "dashboard.css must style .store-status-dot.");
+    assert.strictEqual(css.includes(".store-status-btn.open"), true, "dashboard.css must style .store-status-btn.open.");
+    assert.strictEqual(css.includes(".store-status-btn.closed"), true, "dashboard.css must style .store-status-btn.closed.");
+    assert.strictEqual(css.includes("storeDotPulse"), true, "dashboard.css must define storeDotPulse animation for open status.");
+
+    // JS functions
+    assert.strictEqual(js.includes("updateStoreStatusUI"), true, "app.js must define updateStoreStatusUI.");
+    assert.strictEqual(js.includes("getStoreStatus"), true, "app.js must define getStoreStatus.");
+    assert.strictEqual(js.includes("setStoreStatus"), true, "app.js must define setStoreStatus.");
+    assert.strictEqual(js.includes("initStoreStatusToggle"), true, "app.js must define initStoreStatusToggle.");
+    assert.strictEqual(js.includes("smartprint_store_status"), true, "app.js must persist status to localStorage.");
   });
 });
 

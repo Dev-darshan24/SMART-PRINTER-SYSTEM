@@ -125,6 +125,87 @@ function populateCenterInfo(center) {
   if (ratesBadge && center.rates) {
     ratesBadge.textContent = `B&W: ₹${center.rates.bwSingle}/pg (Single), ₹${center.rates.bwDouble}/pg (Double) • Color: ₹${center.rates.colorSingle}/pg`;
   }
+
+  // Check store status (open vs closed)
+  const isStoreClosed = center.status === 'closed' || center.status === 'inactive' || center.isOpen === false;
+  const storePill = document.getElementById('store-live-status-pill');
+  const printForm = document.getElementById('print-submit-form');
+  const closedView = document.getElementById('store-closed-view');
+
+  if (isStoreClosed) {
+    // 1. Update status pill
+    if (storePill) {
+      storePill.textContent = "🔴 Store Closed";
+      storePill.className = "badge badge-rejected text-xs font-semibold";
+    }
+
+    // 2. Hide upload & print options form
+    if (printForm) {
+      printForm.style.display = 'none';
+    }
+
+    // 3. Show friendly Store Closed Card with visit later message
+    if (closedView) {
+      closedView.style.display = 'block';
+      const closedStoreName = document.getElementById('closed-store-name');
+      const closedStoreAddress = document.getElementById('closed-store-address');
+      const closedStorePhone = document.getElementById('closed-store-phone');
+      const closedStorePhoneRow = document.getElementById('closed-store-phone-row');
+
+      if (closedStoreName) closedStoreName.textContent = `${center.name || 'Store'} is Currently Closed`;
+      if (closedStoreAddress) closedStoreAddress.textContent = center.address || 'Counter Pickup';
+      if (center.phone && closedStorePhone && closedStorePhoneRow) {
+        closedStorePhone.textContent = center.phone;
+        closedStorePhoneRow.style.display = 'flex';
+      }
+    }
+  } else {
+    // 1. Update status pill
+    if (storePill) {
+      storePill.textContent = "🟢 Store Open";
+      storePill.className = "badge badge-completed text-xs font-semibold";
+    }
+
+    // 2. Show upload & print options form
+    if (printForm) {
+      printForm.style.display = 'block';
+    }
+
+    // 3. Hide Store Closed Card
+    if (closedView) {
+      closedView.style.display = 'none';
+    }
+  }
+
+  // Wire Check Again button
+  const checkStatusBtn = document.getElementById('btn-check-store-status');
+  if (checkStatusBtn && !checkStatusBtn.__boundClick) {
+    checkStatusBtn.__boundClick = true;
+    checkStatusBtn.addEventListener('click', async () => {
+      checkStatusBtn.disabled = true;
+      const originalText = checkStatusBtn.innerHTML;
+      checkStatusBtn.innerHTML = `<span>Checking status...</span>`;
+      try {
+        const params = new URLSearchParams(window.location.search);
+        let centerQuery = params.get('center');
+        if (!centerQuery && window.location.pathname.startsWith('/c/')) {
+          centerQuery = window.location.pathname.replace(/^\/c\//, '').split('/')[0];
+        }
+        const refreshedCenter = await api.getPublicCenter(centerQuery || 'default');
+        populateCenterInfo(refreshedCenter);
+        if (refreshedCenter.isOpen) {
+          showToast("Store is now OPEN! You can upload and print your documents.", "success");
+        } else {
+          showToast("Store is still closed. Please check back after some time.", "info");
+        }
+      } catch (e) {
+        showToast("Could not refresh store status. Please try again.", "error");
+      } finally {
+        checkStatusBtn.disabled = false;
+        checkStatusBtn.innerHTML = originalText;
+      }
+    });
+  }
 }
 
 function setupUploadAndScanner() {

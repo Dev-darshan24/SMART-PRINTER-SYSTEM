@@ -265,21 +265,133 @@ export function initSidebarControls() {
   return { exposeSidebar, hideSidebar, toggleSidebar, isMobile };
 }
 
-// Auto-run theme and sidebar shell as soon as DOM is ready
+export function updateStoreStatusUI(isOpen) {
+  const storeStatusBtn = document.getElementById('store-status-btn');
+  const storeStatusText = document.getElementById('store-status-text');
+  if (!storeStatusBtn) return;
+
+  if (isOpen) {
+    storeStatusBtn.classList.remove('closed');
+    storeStatusBtn.classList.add('open');
+    storeStatusBtn.setAttribute('aria-pressed', 'true');
+    storeStatusBtn.setAttribute('title', 'Store is OPEN (Accepting Orders). Click to Close Store.');
+    storeStatusBtn.setAttribute('aria-label', 'Store Status: Open. Click to close store.');
+    if (storeStatusText) storeStatusText.textContent = 'Store Open';
+  } else {
+    storeStatusBtn.classList.remove('open');
+    storeStatusBtn.classList.add('closed');
+    storeStatusBtn.setAttribute('aria-pressed', 'false');
+    storeStatusBtn.setAttribute('title', 'Store is CLOSED (Orders Paused). Click to Open Store.');
+    storeStatusBtn.setAttribute('aria-label', 'Store Status: Closed. Click to open store.');
+    if (storeStatusText) storeStatusText.textContent = 'Store Closed';
+  }
+}
+
+export function getStoreStatus(centerId = null) {
+  if (centerId) {
+    const saved = localStorage.getItem(`smartprint_store_status_${centerId}`);
+    if (saved === 'closed') return false;
+    if (saved === 'open') return true;
+  }
+  const globalSaved = localStorage.getItem('smartprint_store_status');
+  if (globalSaved === 'closed') return false;
+  if (globalSaved === 'open') return true;
+
+  if (centerId) {
+    const center = stateStore.getCenter(centerId);
+    if (center && (center.status === 'closed' || center.status === 'inactive' || center.isOpen === false)) {
+      return false;
+    }
+  }
+  return true; // Default is open
+}
+
+export async function setStoreStatus(isOpen, centerId = null, showNotification = true) {
+  const user = auth.getCurrentUser();
+  const effectiveCenterId = centerId || user?.centerId || stateStore.getCenters()[0]?.centerId;
+
+  // 1. Update UI immediately
+  updateStoreStatusUI(isOpen);
+
+  // 2. Persist in localStorage
+  if (effectiveCenterId) {
+    localStorage.setItem(`smartprint_store_status_${effectiveCenterId}`, isOpen ? 'open' : 'closed');
+  }
+  localStorage.setItem('smartprint_store_status', isOpen ? 'open' : 'closed');
+
+  // 3. Persist in stateStore
+  if (effectiveCenterId) {
+    const center = stateStore.getCenter(effectiveCenterId) || {};
+    stateStore.saveCenter({
+      ...center,
+      centerId: effectiveCenterId,
+      status: isOpen ? 'active' : 'closed',
+      isOpen: isOpen
+    });
+  }
+
+  // 4. Persist in Firestore if online
+  if (effectiveCenterId && db) {
+    try {
+      const centerRef = doc(db, 'centers', effectiveCenterId);
+      await setDoc(centerRef, { 
+        status: isOpen ? 'active' : 'closed', 
+        isOpen: isOpen, 
+        updatedAt: serverTimestamp() 
+      }, { merge: true });
+    } catch (err) {
+      console.warn("Could not sync store status to Firestore:", err.message);
+    }
+  }
+
+  // 5. Toast feedback
+  if (showNotification) {
+    if (isOpen) {
+      showToast("🟢 Store status updated to OPEN: Customers can upload & print documents.", "success");
+    } else {
+      showToast("🔴 Store status updated to CLOSED: Customer print order submissions paused.", "info");
+    }
+  }
+}
+
+export function initStoreStatusToggle(centerId = null) {
+  const storeStatusBtn = document.getElementById('store-status-btn');
+  if (!storeStatusBtn) return;
+
+  const user = auth.getCurrentUser();
+  const effectiveCenterId = centerId || user?.centerId || stateStore.getCenters()[0]?.centerId;
+  const initialOpen = getStoreStatus(effectiveCenterId);
+  updateStoreStatusUI(initialOpen);
+
+  if (!storeStatusBtn.__boundClick) {
+    storeStatusBtn.__boundClick = true;
+    storeStatusBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      const currentIsOpen = storeStatusBtn.classList.contains('open');
+      const nextIsOpen = !currentIsOpen;
+      await setStoreStatus(nextIsOpen, effectiveCenterId, true);
+    });
+  }
+}
+
+// Auto-run theme, sidebar, and store status shell as soon as DOM is ready
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
     initThemeToggle();
     initSidebarControls();
+    initStoreStatusToggle();
   });
 } else {
   initThemeToggle();
   initSidebarControls();
+  initStoreStatusToggle();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
   // Always ensure shell controls are bound
   initThemeToggle();
   initSidebarControls();
+  initStoreStatusToggle();
 
   // Protect page
   if (!auth.protectPage([USER_ROLES.OWNER, USER_ROLES.SUPERADMIN])) return;
@@ -473,21 +585,27 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       } catch (uErr) {}
 
-      if (remoteCenter) {
-        center = remoteCenter;
-        stateStore.saveCenter(remoteCenter);
-        populateProfileForm(remoteCenter, user);
-        restoreUserSettings(remoteCenter);
+        if (remoteCenter) {
+          center = remoteCenter;
+          stateStore.saveCenter(remoteCenter);
+          populateProfileForm(remoteCenter, user);
+          restoreUserSettings(remoteCenter);
 
-        if (centerNameEl) {
-          centerNameEl.textContent = remoteCenter.storeName || remoteCenter.name || "Xerox Management Hub";
-        }
+          const isClosed = remoteCenter.status === 'closed' || remoteCenter.status === 'inactive' || remoteCenter.isOpen === false;
+          updateStoreStatusUI(!isClosed);
+          if (effectiveCenterId) {
+            localStorage.setItem(`smartprint_store_status_${effectiveCenterId}`, isClosed ? 'closed' : 'open');
+          }
 
-        if (topbarLink && remoteCenter.publicId) {
-          topbarLink.href = `/customer/?center=${remoteCenter.publicId}`;
-          topbarLink.style.display = 'inline-flex';
+          if (centerNameEl) {
+            centerNameEl.textContent = remoteCenter.storeName || remoteCenter.name || "Xerox Management Hub";
+          }
+
+          if (topbarLink && remoteCenter.publicId) {
+            topbarLink.href = `/customer/?center=${remoteCenter.publicId}`;
+            topbarLink.style.display = 'inline-flex';
+          }
         }
-      }
     } catch (err) {
       console.warn("Could not sync profile from Firestore:", err.message);
     }
