@@ -384,7 +384,12 @@ function saveStoreStatusRecord(centerId, isOpen, status) {
     updatedAt: new Date().toISOString()
   };
 
-  // Always update global default keys for complete cross-page consistency
+  // 1. Update every existing key in storeStatusMap so no center or alias is left stale
+  for (const k of Object.keys(storeStatusMap)) {
+    storeStatusMap[k] = { ...record };
+  }
+
+  // 2. Always update global default keys for complete cross-page consistency
   storeStatusMap["_default"] = record;
   storeStatusMap["default"] = record;
   storeStatusMap["all"] = record;

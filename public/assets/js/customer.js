@@ -194,14 +194,19 @@ function populateCenterInfo(center) {
   // Check store status (open vs closed)
   const isStoreClosed = center.status === 'closed' || center.status === 'inactive' || center.isOpen === false;
   const storePill = document.getElementById('store-live-status-pill');
+  const headerStorePill = document.getElementById('header-store-status-pill');
   const printForm = document.getElementById('print-submit-form');
   const closedView = document.getElementById('store-closed-view');
 
   if (isStoreClosed) {
-    // 1. Update status pill
+    // 1. Update status pills
     if (storePill) {
       storePill.textContent = "🔴 Store Closed";
       storePill.className = "badge badge-rejected text-xs font-semibold";
+    }
+    if (headerStorePill) {
+      headerStorePill.textContent = "🔴 Store Closed";
+      headerStorePill.className = "badge badge-rejected text-xs font-semibold";
     }
 
     // 2. Hide upload & print options form completely (options only visible if store is open)
@@ -225,10 +230,14 @@ function populateCenterInfo(center) {
       }
     }
   } else {
-    // 1. Update status pill
+    // 1. Update status pills
     if (storePill) {
       storePill.textContent = "🟢 Store Open";
       storePill.className = "badge badge-completed text-xs font-semibold";
+    }
+    if (headerStorePill) {
+      headerStorePill.textContent = "🟢 Store Open";
+      headerStorePill.className = "badge badge-completed text-xs font-semibold";
     }
 
     // 2. Show upload & print options form
@@ -283,17 +292,32 @@ let lastDetectedIsOpen = null;
 function startLiveStoreStatusWatcher(centerQuery) {
   async function checkLiveStatus() {
     try {
+      // 0. Instant sync from localStorage if in same browser
+      const localSaved = localStorage.getItem('smartprint_store_status');
+      if (localSaved === 'closed' || localSaved === 'open') {
+        const localIsOpen = localSaved === 'open';
+        if (currentCenter && currentCenter.isOpen !== localIsOpen) {
+          currentCenter.isOpen = localIsOpen;
+          currentCenter.status = localIsOpen ? 'active' : 'closed';
+          populateCenterInfo(currentCenter);
+          if (localIsOpen) {
+            showToast("🟢 Store has opened! Upload & printing options are now available.", "success");
+          } else {
+            showToast("🔴 Store has closed. New order submissions are currently paused.", "info");
+          }
+        }
+      }
+
+      // 1. Authoritative check via API endpoint
       const res = await fetch(`/api/store/status?center=${encodeURIComponent(centerQuery || '')}`, { cache: 'no-cache' });
       if (res.ok) {
         const data = await res.json();
         if (data && typeof data.isOpen === 'boolean') {
           const nextIsOpen = data.isOpen;
-          if (lastDetectedIsOpen !== null && lastDetectedIsOpen !== nextIsOpen) {
-            if (currentCenter) {
-              currentCenter.isOpen = nextIsOpen;
-              currentCenter.status = nextIsOpen ? 'active' : 'closed';
-              populateCenterInfo(currentCenter);
-            }
+          if (currentCenter && currentCenter.isOpen !== nextIsOpen) {
+            currentCenter.isOpen = nextIsOpen;
+            currentCenter.status = nextIsOpen ? 'active' : 'closed';
+            populateCenterInfo(currentCenter);
             if (nextIsOpen) {
               showToast("🟢 Store has opened! Upload & printing options are now available.", "success");
             } else {
@@ -312,19 +336,22 @@ function startLiveStoreStatusWatcher(centerQuery) {
   window.addEventListener('storage', (e) => {
     if (e.key === 'smartprint_store_status' || (e.key && e.key.startsWith('smartprint_store_status_'))) {
       const nextIsOpen = e.newValue === 'open';
-      if (lastDetectedIsOpen !== nextIsOpen) {
+      if (currentCenter && currentCenter.isOpen !== nextIsOpen) {
         lastDetectedIsOpen = nextIsOpen;
-        if (currentCenter) {
-          currentCenter.isOpen = nextIsOpen;
-          currentCenter.status = nextIsOpen ? 'active' : 'closed';
-          populateCenterInfo(currentCenter);
+        currentCenter.isOpen = nextIsOpen;
+        currentCenter.status = nextIsOpen ? 'active' : 'closed';
+        populateCenterInfo(currentCenter);
+        if (nextIsOpen) {
+          showToast("🟢 Store has opened! Upload & printing options are now available.", "success");
+        } else {
+          showToast("🔴 Store has closed. New order submissions are currently paused.", "info");
         }
       }
     }
   });
 
-  // 2. Real-time background server check every 2 seconds for external phones/devices
-  setInterval(checkLiveStatus, 2000);
+  // 2. Real-time background server check every 1 second
+  setInterval(checkLiveStatus, 1000);
 
   // 3. Instant check when mobile phone screen is awakened or tab regained focus
   document.addEventListener('visibilitychange', () => {
@@ -332,6 +359,9 @@ function startLiveStoreStatusWatcher(centerQuery) {
       checkLiveStatus();
     }
   });
+
+  // 4. Initial immediate check
+  checkLiveStatus();
 }
 
 function setupUploadAndScanner() {

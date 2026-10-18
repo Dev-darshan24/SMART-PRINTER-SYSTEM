@@ -72,9 +72,20 @@ export const api = {
       throw new Error(`CENTER_NOT_FOUND: The requested print center '${publicOrCenterId || 'unknown'}' could not be found.`);
     }
 
-    // Check store status with real-time server check
+    // Check store status with real-time server check and local storage fallback
     let status = center.status || "active";
     let isOpen = center.isOpen !== false && status !== 'closed' && status !== 'inactive';
+
+    const localSavedStatus = (center.centerId && localStorage.getItem(`smartprint_store_status_${center.centerId}`)) ||
+                             (center.publicId && localStorage.getItem(`smartprint_store_status_${center.publicId}`)) ||
+                             localStorage.getItem('smartprint_store_status');
+    if (localSavedStatus === 'closed') {
+      status = 'closed';
+      isOpen = false;
+    } else if (localSavedStatus === 'open') {
+      status = 'active';
+      isOpen = true;
+    }
 
     try {
       const statusRes = await fetch(`/api/store/status?center=${encodeURIComponent(publicOrCenterId || center.publicId || center.centerId || '')}`, { cache: 'no-cache' });
@@ -86,16 +97,7 @@ export const api = {
         }
       }
     } catch (netErr) {
-      const localSavedStatus = (center.centerId && localStorage.getItem(`smartprint_store_status_${center.centerId}`)) ||
-                               (center.publicId && localStorage.getItem(`smartprint_store_status_${center.publicId}`)) ||
-                               localStorage.getItem('smartprint_store_status');
-      if (localSavedStatus === 'closed') {
-        status = 'closed';
-        isOpen = false;
-      } else if (localSavedStatus === 'open') {
-        status = 'active';
-        isOpen = true;
-      }
+      // Offline fallback already covered by localSavedStatus above
     }
 
     return {
