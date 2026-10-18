@@ -234,9 +234,64 @@ function getSystemPrinters(callback) {
   }
 }
 
+// In-memory and file-persisted store status store
+const STORE_STATUS_FILE = path.join(__dirname, "store_status.json");
+let storeStatusMap = {};
+try {
+  if (fs.existsSync(STORE_STATUS_FILE)) {
+    storeStatusMap = JSON.parse(fs.readFileSync(STORE_STATUS_FILE, "utf-8"));
+  }
+} catch (e) {
+  storeStatusMap = {};
+}
+
+function getStoreStatusRecord(centerId) {
+  if (centerId && storeStatusMap[centerId]) {
+    return storeStatusMap[centerId];
+  }
+  if (centerId) {
+    const key = Object.keys(storeStatusMap).find(k => k.toLowerCase() === centerId.toLowerCase());
+    if (key && storeStatusMap[key]) return storeStatusMap[key];
+  }
+  if (storeStatusMap["_default"]) {
+    return storeStatusMap["_default"];
+  }
+  return { isOpen: true, status: "active", updatedAt: new Date().toISOString() };
+}
+
+function saveStoreStatusRecord(centerId, isOpen, status) {
+  const record = {
+    isOpen: !!isOpen,
+    status: isOpen ? "active" : "closed",
+    updatedAt: new Date().toISOString()
+  };
+  if (centerId) {
+    storeStatusMap[centerId] = record;
+  }
+  storeStatusMap["_default"] = record;
+  try {
+    fs.writeFileSync(STORE_STATUS_FILE, JSON.stringify(storeStatusMap, null, 2), "utf-8");
+  } catch (err) {
+    console.warn("Could not save store_status.json:", err.message);
+  }
+  return record;
+}
+
 const server = http.createServer((req, res) => {
   const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
   let pathname = parsedUrl.pathname;
+
+  // Handle CORS preflight
+  if (req.method === "OPTIONS") {
+    res.writeHead(204, {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Access-Control-Max-Age": "86400"
+    });
+    res.end();
+    return;
+  }
 
   // Dynamic /__env.js endpoint delivering client-safe environment variables
   if (pathname === "/__env.js") {
@@ -259,6 +314,65 @@ const server = http.createServer((req, res) => {
     });
     res.end(jsContent);
     return;
+  }
+
+  // Dynamic API endpoint: Live Store Status (Open / Closed)
+  if (pathname === "/api/store/status") {
+    if (req.method === "GET") {
+      const centerQuery = parsedUrl.searchParams.get("center") || "";
+      const record = getStoreStatusRecord(centerQuery);
+      res.writeHead(200, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Access-Control-Allow-Origin": "*",
+        "Cache-Control": "no-cache, no-store, must-revalidate"
+      });
+      res.end(JSON.stringify({
+        success: true,
+        centerId: centerQuery || "default",
+        isOpen: record.isOpen,
+        status: record.status,
+        updatedAt: record.updatedAt
+      }));
+      return;
+    }
+
+    if (req.method === "POST") {
+      let bodyData = "";
+      req.on("data", chunk => {
+        bodyData += chunk;
+        if (bodyData.length > 1e6) {
+          req.destroy();
+        }
+      });
+      req.on("end", () => {
+        try {
+          const body = JSON.parse(bodyData || "{}");
+          const isOpen = body.isOpen !== false && body.status !== "closed";
+          const status = isOpen ? "active" : "closed";
+          const centerId = body.centerId || body.publicId || "";
+          const saved = saveStoreStatusRecord(centerId, isOpen, status);
+          res.writeHead(200, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "no-cache"
+          });
+          res.end(JSON.stringify({
+            success: true,
+            centerId: centerId || "all",
+            isOpen: saved.isOpen,
+            status: saved.status,
+            updatedAt: saved.updatedAt
+          }));
+        } catch (err) {
+          res.writeHead(400, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Access-Control-Allow-Origin": "*"
+          });
+          res.end(JSON.stringify({ success: false, error: err.message }));
+        }
+      });
+      return;
+    }
   }
 
   // Dynamic API endpoint: Real connected external printers on this device

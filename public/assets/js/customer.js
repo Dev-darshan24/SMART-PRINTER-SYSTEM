@@ -43,6 +43,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupUploadAndScanner();
   setupOptionsControls();
   recalculateTotal();
+  startLiveStoreStatusWatcher(centerQuery || 'default');
 
   // Dark / Light Theme Toggle Handler
   const themeToggleBtn = document.getElementById('theme-toggle-btn');
@@ -126,6 +127,10 @@ function populateCenterInfo(center) {
     ratesBadge.textContent = `B&W: ₹${center.rates.bwSingle}/pg (Single), ₹${center.rates.bwDouble}/pg (Double) • Color: ₹${center.rates.colorSingle}/pg`;
   }
 
+  // Hide initial detecting loader
+  const detectingEl = document.getElementById('store-status-detecting');
+  if (detectingEl) detectingEl.style.display = 'none';
+
   // Check store status (open vs closed)
   const isStoreClosed = center.status === 'closed' || center.status === 'inactive' || center.isOpen === false;
   const storePill = document.getElementById('store-live-status-pill');
@@ -139,7 +144,7 @@ function populateCenterInfo(center) {
       storePill.className = "badge badge-rejected text-xs font-semibold";
     }
 
-    // 2. Hide upload & print options form
+    // 2. Hide upload & print options form completely (options only visible if store is open)
     if (printForm) {
       printForm.style.display = 'none';
     }
@@ -192,6 +197,7 @@ function populateCenterInfo(center) {
           centerQuery = window.location.pathname.replace(/^\/c\//, '').split('/')[0];
         }
         const refreshedCenter = await api.getPublicCenter(centerQuery || 'default');
+        currentCenter = refreshedCenter;
         populateCenterInfo(refreshedCenter);
         if (refreshedCenter.isOpen) {
           showToast("Store is now OPEN! You can upload and print your documents.", "success");
@@ -206,6 +212,51 @@ function populateCenterInfo(center) {
       }
     });
   }
+}
+
+/**
+ * Automatically detects whether store is open or closed in real-time
+ * Polling server every 4 seconds so that when the store owner flips the toggle on counter PC,
+ * any customer phone scanning the QR code updates automatically without refreshing.
+ */
+let lastDetectedIsOpen = null;
+function startLiveStoreStatusWatcher(centerQuery) {
+  async function checkLiveStatus() {
+    try {
+      const res = await fetch(`/api/store/status?center=${encodeURIComponent(centerQuery || '')}`, { cache: 'no-cache' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && typeof data.isOpen === 'boolean') {
+          const nextIsOpen = data.isOpen;
+          if (lastDetectedIsOpen !== null && lastDetectedIsOpen !== nextIsOpen) {
+            if (currentCenter) {
+              currentCenter.isOpen = nextIsOpen;
+              currentCenter.status = nextIsOpen ? 'active' : 'closed';
+              populateCenterInfo(currentCenter);
+            }
+            if (nextIsOpen) {
+              showToast("🟢 Store has opened! Upload & printing options are now available.", "success");
+            } else {
+              showToast("🔴 Store has closed. New order submissions are currently paused.", "info");
+            }
+          }
+          lastDetectedIsOpen = nextIsOpen;
+        }
+      }
+    } catch (e) {
+      // Ignore network blips during silent background polling
+    }
+  }
+
+  // Periodic automatic polling
+  setInterval(checkLiveStatus, 4000);
+
+  // Instant check when mobile phone screen is awakened or tab regained focus
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      checkLiveStatus();
+    }
+  });
 }
 
 function setupUploadAndScanner() {

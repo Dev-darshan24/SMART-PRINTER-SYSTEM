@@ -624,4 +624,19 @@
   border-color: rgba(239, 68, 68, 0.4);
 }
 
+.store-status-spinner {
+  width: 32px;
+  height: 32px;
+  margin: 0 auto;
+  border: 3px solid rgba(139, 92, 246, 0.2);
+  border-top-color: var(--primary-600);
+  border-radius: 50%;
+  animation: customerSpin 0.8s linear infinite;
+}
+
+@keyframes customerSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
 

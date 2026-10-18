@@ -112,4 +112,37 @@ describe("SmartPrint — Customer QR Upload, Mobile Scan & Priority Failover Ver
     // API protection
     assert.strictEqual(apiJs.includes("FAILED_PRECONDITION: This print center is currently closed"), true, "api.js must reject submissions when center is closed.");
   });
+
+  it("verifies server.js implements /api/store/status bridging admin counter and customer QR scanners", () => {
+    const serverPath = path.resolve(__dirname, "../server.js");
+    assert.strictEqual(fs.existsSync(serverPath), true, "server.js must exist.");
+    const serverCode = fs.readFileSync(serverPath, "utf-8");
+
+    assert.strictEqual(serverCode.includes("/api/store/status"), true, "server.js must expose /api/store/status endpoint.");
+    assert.strictEqual(serverCode.includes("getStoreStatusRecord"), true, "server.js must read store status records.");
+    assert.strictEqual(serverCode.includes("saveStoreStatusRecord"), true, "server.js must save store status records.");
+    assert.strictEqual(serverCode.includes("store_status.json"), true, "server.js must persist store status to store_status.json.");
+  });
+
+  it("verifies auto-detection across devices: app.js updates server and customer.js polls live status", () => {
+    const html = fs.readFileSync(customerHtmlPath, "utf-8");
+    const customerJs = fs.readFileSync(customerJsPath, "utf-8");
+    const appJs = fs.readFileSync(appJsPath, "utf-8");
+    const apiJs = fs.readFileSync(apiJsPath, "utf-8");
+
+    // 1. Initial HTML state does not prematurely flash open
+    assert.strictEqual(html.includes('id="store-status-detecting"'), true, "customer/index.html must include status detecting loader.");
+    assert.strictEqual(html.includes('id="print-submit-form" class="glass-panel" style="padding: 1.75rem; display: none;"'), true, "print-submit-form must be initially hidden until status check.");
+
+    // 2. Admin app.js sends status to server
+    assert.strictEqual(appJs.includes("fetch('/api/store/status'"), true, "app.js setStoreStatus must POST to /api/store/status.");
+
+    // 3. Customer api.js queries server in real-time
+    assert.strictEqual(apiJs.includes("fetch(`/api/store/status?center="), true, "api.js getPublicCenter must fetch /api/store/status.");
+
+    // 4. customer.js automatically watches and polls store status
+    assert.strictEqual(customerJs.includes("startLiveStoreStatusWatcher"), true, "customer.js must start live store status watcher.");
+    assert.strictEqual(customerJs.includes("visibilitychange"), true, "customer.js must react to screen wake and tab focus.");
+  });
 });
+

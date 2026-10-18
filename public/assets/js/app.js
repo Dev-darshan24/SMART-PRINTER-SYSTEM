@@ -330,7 +330,22 @@ export async function setStoreStatus(isOpen, centerId = null, showNotification =
     });
   }
 
-  // 4. Persist in Firestore if online
+  // 4. Send to server so any external device scanning QR detects status in real time
+  try {
+    await fetch('/api/store/status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        centerId: effectiveCenterId,
+        status: isOpen ? 'active' : 'closed',
+        isOpen: isOpen
+      })
+    });
+  } catch (err) {
+    console.warn("Could not sync store status to server:", err.message);
+  }
+
+  // 5. Persist in Firestore if online
   if (effectiveCenterId && db) {
     try {
       const centerRef = doc(db, 'centers', effectiveCenterId);
@@ -344,7 +359,7 @@ export async function setStoreStatus(isOpen, centerId = null, showNotification =
     }
   }
 
-  // 5. Toast feedback
+  // 6. Toast feedback
   if (showNotification) {
     if (isOpen) {
       showToast("🟢 Store status updated to OPEN: Customers can upload & print documents.", "success");
@@ -362,6 +377,20 @@ export function initStoreStatusToggle(centerId = null) {
   const effectiveCenterId = centerId || user?.centerId || stateStore.getCenters()[0]?.centerId;
   const initialOpen = getStoreStatus(effectiveCenterId);
   updateStoreStatusUI(initialOpen);
+
+  // Asynchronously query server for authoritative store status in case changed elsewhere
+  fetch(`/api/store/status?center=${encodeURIComponent(effectiveCenterId || '')}`, { cache: 'no-cache' })
+    .then(r => r.json())
+    .then(data => {
+      if (data && typeof data.isOpen === 'boolean') {
+        updateStoreStatusUI(data.isOpen);
+        if (effectiveCenterId) {
+          localStorage.setItem(`smartprint_store_status_${effectiveCenterId}`, data.isOpen ? 'open' : 'closed');
+        }
+        localStorage.setItem('smartprint_store_status', data.isOpen ? 'open' : 'closed');
+      }
+    })
+    .catch(() => {});
 
   if (!storeStatusBtn.__boundClick) {
     storeStatusBtn.__boundClick = true;

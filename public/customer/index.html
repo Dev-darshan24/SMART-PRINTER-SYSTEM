@@ -54,9 +54,16 @@
         </div>
         <div style="margin-top: 0.35rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
           <span class="badge badge-submitted text-xs" id="rates-badge">Standard Pricing Active</span>
-          <span class="badge badge-completed text-xs font-semibold" id="store-live-status-pill">🟢 Store Open</span>
+          <span class="badge text-xs font-semibold" id="store-live-status-pill">Detecting store status...</span>
         </div>
       </div>
+    </div>
+
+    <!-- Store Status Detecting Loader -->
+    <div id="store-status-detecting" class="glass-panel" style="padding: 2.5rem 1.5rem; text-align: center; margin-bottom: 2rem;">
+      <div class="store-status-spinner"></div>
+      <h3 style="font-size: 1.1rem; font-weight: 600; margin: 0.75rem 0 0.25rem;">Checking Store Status...</h3>
+      <p class="text-xs text-muted" style="margin: 0;">Detecting whether this Xerox center is currently open or closed</p>
     </div>
 
     <!-- Store Closed View (Shown dynamically when store status is Closed) -->
@@ -102,7 +109,7 @@
     </div>
 
     <!-- Print Submission Form -->
-    <form id="print-submit-form" class="glass-panel" style="padding: 1.75rem;">
+    <form id="print-submit-form" class="glass-panel" style="padding: 1.75rem; display: none;">
       <div class="flex justify-between items-center" style="flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.25rem;">
         <h2 style="font-size: 1.25rem; margin: 0;">Upload Printing Material</h2>
         <span class="badge badge-submitted text-xs font-semibold" id="materials-count-badge">Multiple Files Supported</span>

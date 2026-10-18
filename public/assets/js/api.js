@@ -49,18 +49,31 @@ export const api = {
       throw new Error("Center not found or unavailable.");
     }
 
-    // Check store status
+    // Check store status with real-time server check (vital for phone QR code scans)
     let status = center.status || "active";
     let isOpen = center.isOpen !== false && status !== 'closed' && status !== 'inactive';
-    const localSavedStatus = (center.centerId && localStorage.getItem(`smartprint_store_status_${center.centerId}`)) ||
-                             (center.publicId && localStorage.getItem(`smartprint_store_status_${center.publicId}`)) ||
-                             localStorage.getItem('smartprint_store_status');
-    if (localSavedStatus === 'closed') {
-      status = 'closed';
-      isOpen = false;
-    } else if (localSavedStatus === 'open') {
-      status = 'active';
-      isOpen = true;
+
+    try {
+      const statusRes = await fetch(`/api/store/status?center=${encodeURIComponent(publicOrCenterId || center.publicId || center.centerId || '')}`, { cache: 'no-cache' });
+      if (statusRes.ok) {
+        const statusData = await statusRes.json();
+        if (statusData && typeof statusData.isOpen === 'boolean') {
+          isOpen = statusData.isOpen;
+          status = statusData.isOpen ? 'active' : 'closed';
+        }
+      }
+    } catch (netErr) {
+      // Offline fallback: check localStorage
+      const localSavedStatus = (center.centerId && localStorage.getItem(`smartprint_store_status_${center.centerId}`)) ||
+                               (center.publicId && localStorage.getItem(`smartprint_store_status_${center.publicId}`)) ||
+                               localStorage.getItem('smartprint_store_status');
+      if (localSavedStatus === 'closed') {
+        status = 'closed';
+        isOpen = false;
+      } else if (localSavedStatus === 'open') {
+        status = 'active';
+        isOpen = true;
+      }
     }
 
     return {
