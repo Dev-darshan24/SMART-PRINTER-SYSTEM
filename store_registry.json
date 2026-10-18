@@ -1,0 +1,74 @@
+{
+  "1000000": {
+    "centerId": "center_default",
+    "publicId": "CTR-100000",
+    "uniqueId": "1000000",
+    "name": "SmartPrint Xerox & Digital Store",
+    "storeName": "SmartPrint Xerox & Digital Store",
+    "address": "Counter Pickup, Main Branch",
+    "phone": "+91 98765 43210",
+    "rates": {
+      "bwSingle": 2,
+      "bwDouble": 3.5,
+      "colorSingle": 10,
+      "colorDouble": 18
+    },
+    "isOpen": true,
+    "status": "active",
+    "updatedAt": "2026-10-18T09:55:14.704Z"
+  },
+  "default": {
+    "centerId": "center_default",
+    "publicId": "CTR-100000",
+    "uniqueId": "1000000",
+    "name": "SmartPrint Xerox & Digital Store",
+    "storeName": "SmartPrint Xerox & Digital Store",
+    "address": "Counter Pickup, Main Branch",
+    "phone": "+91 98765 43210",
+    "rates": {
+      "bwSingle": 2,
+      "bwDouble": 3.5,
+      "colorSingle": 10,
+      "colorDouble": 18
+    },
+    "isOpen": true,
+    "status": "active",
+    "updatedAt": "2026-10-18T09:55:14.704Z"
+  },
+  "center_default": {
+    "centerId": "center_default",
+    "publicId": "CTR-100000",
+    "uniqueId": "1000000",
+    "name": "SmartPrint Xerox & Digital Store",
+    "storeName": "SmartPrint Xerox & Digital Store",
+    "address": "Counter Pickup, Main Branch",
+    "phone": "+91 98765 43210",
+    "rates": {
+      "bwSingle": 2,
+      "bwDouble": 3.5,
+      "colorSingle": 10,
+      "colorDouble": 18
+    },
+    "isOpen": true,
+    "status": "active",
+    "updatedAt": "2026-10-18T09:55:14.704Z"
+  },
+  "CTR-100000": {
+    "centerId": "center_default",
+    "publicId": "CTR-100000",
+    "uniqueId": "1000000",
+    "name": "SmartPrint Xerox & Digital Store",
+    "storeName": "SmartPrint Xerox & Digital Store",
+    "address": "Counter Pickup, Main Branch",
+    "phone": "+91 98765 43210",
+    "rates": {
+      "bwSingle": 2,
+      "bwDouble": 3.5,
+      "colorSingle": 10,
+      "colorDouble": 18
+    },
+    "isOpen": true,
+    "status": "active",
+    "updatedAt": "2026-10-18T09:55:14.704Z"
+  }
+}

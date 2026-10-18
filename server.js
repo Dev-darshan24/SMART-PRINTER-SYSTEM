@@ -245,6 +245,41 @@ try {
   storeStatusMap = {};
 }
 
+// In-memory and file-persisted store registry (for instant <1s QR scan resolution)
+const STORE_REGISTRY_FILE = path.join(__dirname, "store_registry.json");
+let storeRegistryMap = {};
+try {
+  if (fs.existsSync(STORE_REGISTRY_FILE)) {
+    storeRegistryMap = JSON.parse(fs.readFileSync(STORE_REGISTRY_FILE, "utf-8"));
+  }
+} catch (e) {
+  storeRegistryMap = {};
+}
+
+// Default store initialization if registry is empty
+if (!storeRegistryMap["default"] && Object.keys(storeRegistryMap).length === 0) {
+  const defaultStore = {
+    centerId: "center_default",
+    publicId: "CTR-100000",
+    uniqueId: "1000000",
+    name: "SmartPrint Xerox & Digital Store",
+    storeName: "SmartPrint Xerox & Digital Store",
+    address: "Counter Pickup, Main Branch",
+    phone: "+91 98765 43210",
+    rates: { bwSingle: 2.0, bwDouble: 3.5, colorSingle: 10.0, colorDouble: 18.0 },
+    isOpen: true,
+    status: "active",
+    updatedAt: new Date().toISOString()
+  };
+  storeRegistryMap["default"] = defaultStore;
+  storeRegistryMap["center_default"] = defaultStore;
+  storeRegistryMap["CTR-100000"] = defaultStore;
+  storeRegistryMap["1000000"] = defaultStore;
+  try {
+    fs.writeFileSync(STORE_REGISTRY_FILE, JSON.stringify(storeRegistryMap, null, 2), "utf-8");
+  } catch(e) {}
+}
+
 function getStoreStatusRecord(centerId) {
   if (centerId && storeStatusMap[centerId]) {
     return storeStatusMap[centerId];
@@ -257,6 +292,73 @@ function getStoreStatusRecord(centerId) {
     return storeStatusMap["_default"];
   }
   return { isOpen: true, status: "active", updatedAt: new Date().toISOString() };
+}
+
+function getStoreRecord(centerQuery) {
+  const query = (centerQuery || "").trim().toLowerCase();
+  let found = null;
+  if (query) {
+    const key = Object.keys(storeRegistryMap).find(k => k.toLowerCase() === query);
+    if (key) found = storeRegistryMap[key];
+
+    if (!found) {
+      found = Object.values(storeRegistryMap).find(c => 
+        (c.centerId && c.centerId.toLowerCase() === query) ||
+        (c.publicId && c.publicId.toLowerCase() === query) ||
+        (c.uniqueId && String(c.uniqueId).toLowerCase() === query) ||
+        (c.storeName && c.storeName.toLowerCase() === query) ||
+        (c.name && c.name.toLowerCase() === query)
+      );
+    }
+  }
+
+  // Fallback if query is default, empty, or single store setup
+  if (!found && (!query || query === 'default' || Object.keys(storeRegistryMap).length <= 4)) {
+    found = storeRegistryMap["default"] || Object.values(storeRegistryMap)[0] || null;
+  }
+
+  if (found) {
+    const statusRecord = getStoreStatusRecord(found.publicId || found.centerId || centerQuery);
+    return {
+      ...found,
+      isOpen: statusRecord.isOpen,
+      status: statusRecord.status
+    };
+  }
+
+  return null;
+}
+
+function saveStoreRecord(centerData) {
+  if (!centerData) return null;
+  const publicId = centerData.publicId || centerData.centerId || ('CTR-' + String(centerData.uniqueId || '100000').substring(0, 6));
+  const record = {
+    centerId: centerData.centerId || publicId,
+    publicId: publicId,
+    uniqueId: String(centerData.uniqueId || '1000000'),
+    name: centerData.storeName || centerData.name || 'SmartPrint Xerox Center',
+    storeName: centerData.storeName || centerData.name || 'SmartPrint Xerox Center',
+    address: centerData.address || 'Counter Pickup',
+    phone: centerData.phone || '',
+    rates: centerData.rates || { bwSingle: 2.0, bwDouble: 3.5, colorSingle: 10.0, colorDouble: 18.0 },
+    isOpen: centerData.isOpen !== false && centerData.status !== 'closed',
+    status: (centerData.isOpen !== false && centerData.status !== 'closed') ? 'active' : 'closed',
+    updatedAt: new Date().toISOString()
+  };
+
+  storeRegistryMap[record.centerId] = record;
+  storeRegistryMap[record.publicId] = record;
+  storeRegistryMap[record.uniqueId] = record;
+  storeRegistryMap["default"] = record;
+
+  try {
+    fs.writeFileSync(STORE_REGISTRY_FILE, JSON.stringify(storeRegistryMap, null, 2), "utf-8");
+  } catch (err) {
+    console.warn("Could not save store_registry.json:", err.message);
+  }
+
+  saveStoreStatusRecord(record.publicId, record.isOpen, record.status);
+  return record;
 }
 
 function saveStoreStatusRecord(centerId, isOpen, status) {
@@ -274,6 +376,17 @@ function saveStoreStatusRecord(centerId, isOpen, status) {
   } catch (err) {
     console.warn("Could not save store_status.json:", err.message);
   }
+
+  // Also update corresponding record in storeRegistryMap if present
+  if (centerId && storeRegistryMap[centerId]) {
+    storeRegistryMap[centerId].isOpen = record.isOpen;
+    storeRegistryMap[centerId].status = record.status;
+  }
+  if (storeRegistryMap["default"]) {
+    storeRegistryMap["default"].isOpen = record.isOpen;
+    storeRegistryMap["default"].status = record.status;
+  }
+
   return record;
 }
 
@@ -363,6 +476,57 @@ const server = http.createServer((req, res) => {
             status: saved.status,
             updatedAt: saved.updatedAt
           }));
+        } catch (err) {
+          res.writeHead(400, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Access-Control-Allow-Origin": "*"
+          });
+          res.end(JSON.stringify({ success: false, error: err.message }));
+        }
+      });
+      return;
+    }
+  }
+
+  // Dynamic API endpoint: Live Store Center Profile & Info (For instant <1s QR scan resolution across devices)
+  if (pathname === "/api/store/center" || pathname === "/api/store/sync") {
+    if (req.method === "GET") {
+      const centerQuery = parsedUrl.searchParams.get("center") || "";
+      const center = getStoreRecord(centerQuery);
+      if (center) {
+        res.writeHead(200, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Access-Control-Allow-Origin": "*",
+          "Cache-Control": "no-cache, no-store, must-revalidate"
+        });
+        res.end(JSON.stringify({ success: true, center }));
+      } else {
+        res.writeHead(404, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Access-Control-Allow-Origin": "*",
+          "Cache-Control": "no-cache, no-store, must-revalidate"
+        });
+        res.end(JSON.stringify({ success: false, error: "CENTER_NOT_FOUND" }));
+      }
+      return;
+    }
+
+    if (req.method === "POST") {
+      let bodyData = "";
+      req.on("data", chunk => {
+        bodyData += chunk;
+        if (bodyData.length > 1e6) req.destroy();
+      });
+      req.on("end", () => {
+        try {
+          const body = JSON.parse(bodyData || "{}");
+          const saved = saveStoreRecord(body);
+          res.writeHead(200, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "no-cache"
+          });
+          res.end(JSON.stringify({ success: true, center: saved }));
         } catch (err) {
           res.writeHead(400, {
             "Content-Type": "application/json; charset=utf-8",

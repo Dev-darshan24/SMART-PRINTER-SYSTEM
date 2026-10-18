@@ -955,16 +955,9 @@ document.addEventListener('DOMContentLoaded', () => {
   async function loadQrImageForCanvas(profileData) {
     const qrImgEl = document.getElementById('permanent-qr-image');
     const uid = String(profileData.uniqueId || '1000000');
-    const qrPayload = JSON.stringify({
-      type: "smartprint_user_profile",
-      uid: uid,
-      store: profileData.storeName || '',
-      user: profileData.userName || '',
-      phone: profileData.phone || '',
-      email: profileData.email || '',
-      v: 1
-    });
-    const fallbackUrl = `https://api.qrserver.com/v1/create-qr-code/?size=480x480&margin=10&data=${encodeURIComponent(qrPayload)}`;
+    const publicId = profileData.publicId || ('CTR-' + uid.substring(0, 6));
+    const customerUrl = `${window.location.origin}/customer/?center=${encodeURIComponent(publicId)}`;
+    const fallbackUrl = `https://api.qrserver.com/v1/create-qr-code/?size=480x480&margin=10&data=${encodeURIComponent(customerUrl)}`;
     const src = (qrImgEl && qrImgEl.src) ? qrImgEl.src : fallbackUrl;
 
     return new Promise((resolve) => {
@@ -2841,8 +2834,27 @@ function populateProfileForm(center, maybeUser = null) {
     email,
     address,
     gender,
-    uniqueId
+    uniqueId,
+    publicId
   });
+
+  // Sync store profile to local server registry for instant <1s QR scan resolution
+  try {
+    fetch('/api/store/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        centerId: c.centerId || publicId,
+        publicId: publicId,
+        uniqueId: uniqueId,
+        storeName: storeName,
+        name: storeName,
+        address: address,
+        phone: phone,
+        rates: rates
+      })
+    }).catch(() => {});
+  } catch (e) {}
 }
 
 function renderActionButtons(job) {
