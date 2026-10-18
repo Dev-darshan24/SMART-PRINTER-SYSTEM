@@ -249,12 +249,11 @@ describe("SmartPrint — Customer QR Upload, Mobile Scan & Priority Failover Ver
       assert.strictEqual(stateJs.includes("rejected: []"), true);
     });
 
-    it("17: verifies existing application functionality, glassmorphism UI, and dark theme remain intact", () => {
+    it("17: verifies existing application functionality and glassmorphism UI remain intact while header is streamlined", () => {
       const html = fs.readFileSync(customerHtmlPath, "utf-8");
       assert.strictEqual(html.includes("glass-panel"), true);
-      assert.strictEqual(html.includes("theme-toggle-btn"), true);
-      assert.strictEqual(html.includes("theme-icon-sun"), true);
-      assert.strictEqual(html.includes("theme-icon-moon"), true);
+      assert.strictEqual(html.includes("theme-toggle-btn"), false);
+      assert.strictEqual(html.includes("Track Existing Job"), false);
       assert.strictEqual(html.includes("Online Payment"), true);
       assert.strictEqual(html.includes("Coming Soon"), true);
     });
