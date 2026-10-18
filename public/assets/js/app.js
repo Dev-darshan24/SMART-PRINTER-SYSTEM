@@ -2339,7 +2339,13 @@ function renderQueue(centerId) {
   jobs.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
   if (currentFilter !== 'all') {
-    jobs = jobs.filter(j => j.status === currentFilter);
+    if (currentFilter === 'submitted') {
+      jobs = jobs.filter(j => j.status === 'submitted' || j.status === 'pending_confirmation');
+    } else if (currentFilter === 'under_review') {
+      jobs = jobs.filter(j => j.status === 'under_review' || j.status === 'approved_awaiting_cash' || j.status === 'payment_confirmed' || j.status === 'queued');
+    } else {
+      jobs = jobs.filter(j => j.status === currentFilter);
+    }
   }
 
   if (searchQuery) {
@@ -2840,10 +2846,40 @@ function populateProfileForm(center, maybeUser = null) {
 }
 
 function renderActionButtons(job) {
+  if (job.status === 'pending_confirmation') {
+    return `
+      <button class="btn btn-primary btn-sm action-status-btn" data-id="${job.jobId}" data-status="approved_awaiting_cash" title="Approve this print request">
+        ${ICONS.check} Approve
+      </button>
+      <button class="btn btn-danger btn-sm action-status-btn" data-id="${job.jobId}" data-status="rejected" title="Reject print request">
+        Reject
+      </button>
+    `;
+  }
+  if (job.status === 'approved_awaiting_cash') {
+    return `
+      <button class="btn btn-success btn-sm action-status-btn" data-id="${job.jobId}" data-status="payment_confirmed" style="background: var(--success-bg, rgba(34,197,94,0.15)); color: var(--success-text, #15803d); border: 1px solid var(--success-border, #86efac); font-weight: 600;" title="Confirm cash received at counter">
+        ${ICONS.check} Confirm Cash (₹${(job.estimatedAmount || 0).toFixed(2)})
+      </button>
+      <button class="btn btn-danger btn-sm action-status-btn" data-id="${job.jobId}" data-status="rejected" title="Reject print request">
+        Reject
+      </button>
+    `;
+  }
+  if (job.status === 'payment_confirmed' || job.status === 'queued') {
+    return `
+      <button class="btn btn-primary btn-sm action-print-btn" data-id="${job.jobId}">
+        ${ICONS.printer} Print Now
+      </button>
+      <button class="btn btn-danger btn-sm action-status-btn" data-id="${job.jobId}" data-status="rejected">
+        Reject
+      </button>
+    `;
+  }
   if (job.status === 'submitted') {
     return `
-      <button class="btn btn-secondary btn-sm action-status-btn" data-id="${job.jobId}" data-status="under_review">
-        Review
+      <button class="btn btn-secondary btn-sm action-status-btn" data-id="${job.jobId}" data-status="approved_awaiting_cash">
+        Approve
       </button>
       <button class="btn btn-primary btn-sm action-print-btn" data-id="${job.jobId}">
         ${ICONS.printer} Print Now
@@ -2880,7 +2916,9 @@ function attachActionListeners() {
       const jobId = btn.getAttribute('data-id');
       const newStatus = btn.getAttribute('data-status');
       try {
-        stateStore.updateJobStatus(jobId, newStatus);
+        const user = auth.getCurrentUser();
+        const ownerCenterId = user?.centerId;
+        stateStore.updateJobStatus(jobId, newStatus, user?.uid || 'owner', ownerCenterId);
         showToast(`Job status updated to ${newStatus}`, 'success');
       } catch (err) {
         showToast(err.message, 'error');
@@ -2893,8 +2931,26 @@ function attachActionListeners() {
       const jobId = btn.getAttribute('data-id');
       try {
         const job = stateStore.getJob(jobId);
+        if (!job) throw new Error("Job not found");
+
         const user = auth.getCurrentUser();
         const centerId = user?.centerId || stateStore.getCenters()[0]?.centerId;
+
+        // Strict Tenant Isolation: verify job center matches current authenticated owner's center
+        if (job.centerId && centerId && job.centerId !== centerId) {
+          throw new Error("PERMISSION_DENIED: Tenant isolation violation. Cannot print an order belonging to another store.");
+        }
+
+        // Cash payment workflow rule: Cash orders must be confirmed before printing can be triggered
+        if (job.paymentMethod === 'cash') {
+          if (job.status === 'pending_confirmation') {
+            throw new Error("Cannot print: Order is pending owner approval.");
+          }
+          if (job.status === 'approved_awaiting_cash') {
+            throw new Error("Cannot print: Cash collection must be confirmed at counter first.");
+          }
+        }
+
         const centerObj = centerId ? stateStore.getCenter(centerId) : null;
         const isColor = job?.printOptions?.colorMode === 'color' || job?.colorMode === 'color';
 
@@ -2997,8 +3053,8 @@ function updateTabBadges(centerId) {
   const jobs = stateStore.getJobs(centerId);
   const counts = {
     all: jobs.length,
-    submitted: jobs.filter(j => j.status === 'submitted').length,
-    under_review: jobs.filter(j => j.status === 'under_review').length,
+    submitted: jobs.filter(j => j.status === 'submitted' || j.status === 'pending_confirmation').length,
+    under_review: jobs.filter(j => j.status === 'under_review' || j.status === 'approved_awaiting_cash' || j.status === 'payment_confirmed' || j.status === 'queued').length,
     printing: jobs.filter(j => j.status === 'printing').length,
     completed: jobs.filter(j => j.status === 'completed').length
   };

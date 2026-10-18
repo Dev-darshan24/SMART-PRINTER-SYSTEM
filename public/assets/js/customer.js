@@ -31,12 +31,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   try {
-    currentCenter = await api.getPublicCenter(centerQuery || 'default');
+    currentCenter = await api.getPublicCenter(centerQuery);
     populateCenterInfo(currentCenter);
   } catch (err) {
-    showToast("Selected Xerox center not found or unavailable", "error");
-    const nameEl = document.getElementById('center-name-display');
-    if (nameEl) nameEl.textContent = "Center Unavailable";
+    showCenterNotFound(centerQuery, err.message);
     return;
   }
 
@@ -77,28 +75,65 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
       }
 
+      // Check payment selection: Cash vs Online
+      const paymentMethodRadio = document.querySelector('input[name="payment-method"]:checked');
+      const selectedPayment = paymentMethodRadio ? paymentMethodRadio.value : 'cash';
+      if (selectedPayment === 'online') {
+        showToast("Online payment is coming soon. Please select Cash at Counter.", "warning");
+        return;
+      }
+
       const submitBtn = document.getElementById('btn-submit-job');
       submitBtn.disabled = true;
       submitBtn.innerHTML = `Submitting ${selectedMaterials.length} Material${selectedMaterials.length > 1 ? 's' : ''}...`;
 
       try {
         const totalPages = getTotalPages();
+        const totalAmount = calculateCost();
         const result = await api.submitPrintJob({
-          centerId: currentCenter.publicId,
+          centerId: currentCenter.publicId || currentCenter.centerId,
           files: selectedMaterials,
           pageCount: totalPages,
           copies: printOptions.copies,
           colorMode: printOptions.colorMode,
           duplex: printOptions.duplex,
           paperSize: printOptions.paperSize,
-          estimatedAmount: calculateCost(),
+          paymentMethod: 'cash',
+          estimatedAmount: totalAmount,
           customerNote: document.getElementById('customer-note')?.value || ''
         });
 
         showToast("Documents submitted successfully to Xerox Queue!", "success");
-        setTimeout(() => {
-          window.location.href = `/customer/track.html?token=${encodeURIComponent(result.trackingToken)}`;
-        }, 600);
+
+        // Reveal Order Confirmation Card
+        if (form) form.style.display = 'none';
+        const confirmView = document.getElementById('order-confirmation-view');
+        if (confirmView) {
+          confirmView.style.display = 'block';
+          const tokenEl = document.getElementById('confirm-tracking-token');
+          if (tokenEl) tokenEl.textContent = result.trackingToken;
+          const amtEl = document.getElementById('confirm-order-amount');
+          if (amtEl) amtEl.textContent = `Estimated: ₹${totalAmount.toFixed(2)} • Cash at counter (${totalPages} pgs × ${printOptions.copies} cop${printOptions.copies > 1 ? 'ies' : 'y'})`;
+          const trackBtn = document.getElementById('btn-track-submitted-job');
+          if (trackBtn) trackBtn.href = `/customer/track.html?token=${encodeURIComponent(result.trackingToken)}`;
+
+          const submitAnother = document.getElementById('btn-submit-another-job');
+          if (submitAnother && !submitAnother.__boundClick) {
+            submitAnother.__boundClick = true;
+            submitAnother.addEventListener('click', () => {
+              selectedMaterials = [];
+              renderMaterialsList();
+              confirmView.style.display = 'none';
+              form.style.display = 'block';
+              submitBtn.disabled = false;
+              submitBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg> Send to Xerox Queue`;
+            });
+          }
+        } else {
+          setTimeout(() => {
+            window.location.href = `/customer/track.html?token=${encodeURIComponent(result.trackingToken)}`;
+          }, 800);
+        }
       } catch (err) {
         showToast(err.message, "error");
         submitBtn.disabled = false;
@@ -107,6 +142,31 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 });
+
+function showCenterNotFound(centerQuery, message) {
+  const detectingEl = document.getElementById('store-status-detecting');
+  if (detectingEl) detectingEl.style.display = 'none';
+
+  const banner = document.querySelector('.center-card-banner');
+  if (banner) banner.style.display = 'none';
+
+  const printForm = document.getElementById('print-submit-form');
+  if (printForm) printForm.style.display = 'none';
+
+  const closedView = document.getElementById('store-closed-view');
+  if (closedView) closedView.style.display = 'none';
+
+  const notFoundView = document.getElementById('center-not-found-view');
+  if (notFoundView) {
+    notFoundView.style.display = 'block';
+    const notFoundMsg = document.getElementById('not-found-message');
+    if (notFoundMsg && centerQuery) {
+      notFoundMsg.textContent = `The requested print center "${centerQuery}" could not be found or is unavailable. Please verify your store's QR code or contact the store counter staff for the correct link.`;
+    }
+  }
+
+  showToast(`Print center "${centerQuery || 'unknown'}" not found`, "error");
+}
 
 function populateCenterInfo(center) {
   const nameEl = document.getElementById('center-name-display');
@@ -347,25 +407,78 @@ function handleCameraScanFile(file) {
   reader.readAsDataURL(file);
 }
 
-function handleFilesAddition(files) {
+async function validateFileHeader(file) {
+  try {
+    const slice = file.slice(0, 8);
+    const buffer = await slice.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    
+    // PDF: %PDF -> 0x25, 0x50, 0x44, 0x46
+    if (bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46) {
+      return { valid: true, type: 'pdf' };
+    }
+    // PNG: 0x89, 0x50, 0x4E, 0x47
+    if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) {
+      return { valid: true, type: 'png' };
+    }
+    // JPEG/JPG: 0xFF, 0xD8, 0xFF
+    if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) {
+      return { valid: true, type: 'jpeg' };
+    }
+    // DOCX (ZIP archive): 0x50, 0x4B, 0x03, 0x04
+    if (bytes[0] === 0x50 && bytes[1] === 0x4B && bytes[2] === 0x03 && bytes[3] === 0x04) {
+      return { valid: true, type: 'docx' };
+    }
+    return { valid: false, reason: 'File content signature does not match supported formats.' };
+  } catch (err) {
+    return { valid: false, reason: err.message };
+  }
+}
+
+async function estimatePdfPageCount(file) {
+  try {
+    const buffer = await file.arrayBuffer();
+    const text = new TextDecoder('latin1').decode(buffer);
+    const matches = text.match(/\/Type\s*\/Page\b/g);
+    if (matches && matches.length > 0) {
+      return matches.length;
+    }
+    const countMatch = text.match(/\/Count\s+(\d+)/);
+    if (countMatch && parseInt(countMatch[1], 10) > 0) {
+      return parseInt(countMatch[1], 10);
+    }
+  } catch (e) {
+    console.warn("Could not parse PDF page count:", e);
+  }
+  return 1;
+}
+
+async function handleFilesAddition(files) {
   const allowedExtensions = ['.pdf', '.png', '.jpg', '.jpeg', '.docx'];
   let addedCount = 0;
 
-  files.forEach(file => {
+  for (const file of files) {
     const ext = '.' + file.name.split('.').pop().toLowerCase();
     if (!allowedExtensions.includes(ext)) {
       showToast(`Skipped ${file.name}: unsupported format.`, "warning");
-      return;
+      continue;
     }
 
     if (file.size > 25 * 1024 * 1024) {
       showToast(`Skipped ${file.name}: exceeds 25 MB.`, "error");
-      return;
+      continue;
+    }
+
+    // Verify magic bytes header
+    const headerCheck = await validateFileHeader(file);
+    if (!headerCheck.valid) {
+      showToast(`Skipped ${file.name}: ${headerCheck.reason}`, "error");
+      continue;
     }
 
     let pages = 1;
     if (ext === '.pdf') {
-      pages = Math.max(1, Math.min(50, Math.round(file.size / (150 * 1024))));
+      pages = await estimatePdfPageCount(file);
     }
 
     const material = {
@@ -381,7 +494,7 @@ function handleFilesAddition(files) {
 
     selectedMaterials.push(material);
     addedCount++;
-  });
+  }
 
   if (addedCount > 0) {
     renderMaterialsList();
@@ -532,7 +645,7 @@ function setupOptionsControls() {
   }
 }
 
-function calculateCost() {
+function getRateBreakdown() {
   const rates = currentCenter?.rates || {
     bwSingle: 2.0,
     bwDouble: 3.5,
@@ -541,22 +654,57 @@ function calculateCost() {
   };
 
   let perPageRate = rates.bwSingle;
+  let modeLabel = 'B&W, Single-sided';
   if (printOptions.colorMode === 'color') {
-    perPageRate = printOptions.duplex ? (rates.colorDouble || 18.0) : (rates.colorSingle || 10.0);
+    if (printOptions.duplex) {
+      perPageRate = rates.colorDouble || 18.0;
+      modeLabel = 'Color, Double-sided';
+    } else {
+      perPageRate = rates.colorSingle || 10.0;
+      modeLabel = 'Color, Single-sided';
+    }
   } else {
-    perPageRate = printOptions.duplex ? (rates.bwDouble || 3.5) : (rates.bwSingle || 2.0);
+    if (printOptions.duplex) {
+      perPageRate = rates.bwDouble || 3.5;
+      modeLabel = 'B&W, Double-sided';
+    } else {
+      perPageRate = rates.bwSingle || 2.0;
+      modeLabel = 'B&W, Single-sided';
+    }
   }
 
-  if (printOptions.paperSize === 'A3') perPageRate *= 2;
+  let sizeLabel = printOptions.paperSize || 'A4';
+  if (printOptions.paperSize === 'A3') {
+    perPageRate *= 2;
+    sizeLabel = 'A3';
+  }
 
   const totalPages = Math.max(1, getTotalPages());
-  const total = perPageRate * totalPages * printOptions.copies;
-  return Math.max(1, total);
+  const copies = Math.max(1, printOptions.copies);
+  const total = perPageRate * totalPages * copies;
+  return {
+    perPageRate,
+    modeLabel,
+    sizeLabel,
+    totalPages,
+    copies,
+    total: Math.max(1, total)
+  };
+}
+
+function calculateCost() {
+  return getRateBreakdown().total;
 }
 
 function recalculateTotal() {
-  const total = calculateCost();
+  const breakdown = getRateBreakdown();
   const el = document.getElementById('estimated-cost-display');
-  if (el) el.textContent = formatCurrencyINR(total);
+  if (el) el.textContent = formatCurrencyINR(breakdown.total);
+
+  const breakdownEl = document.getElementById('price-breakdown-details');
+  if (breakdownEl) {
+    breakdownEl.textContent = `${breakdown.totalPages} page${breakdown.totalPages > 1 ? 's' : ''} × ${breakdown.copies} cop${breakdown.copies > 1 ? 'ies' : 'y'} (${breakdown.sizeLabel}, ${breakdown.modeLabel}) @ ₹${breakdown.perPageRate.toFixed(2)}/pg`;
+  }
 }
+
 

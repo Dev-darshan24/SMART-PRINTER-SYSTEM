@@ -2,19 +2,24 @@ const admin = require("firebase-admin");
 const crypto = require("crypto");
 
 const VALID_TRANSITIONS = {
-  submitted: ["under_review", "cancelled", "rejected"],
-  under_review: ["printing", "rejected", "cancelled"],
-  printing: ["completed", "rejected"],
+  submitted: ["under_review", "approved_awaiting_cash", "cancelled", "rejected"],
+  pending_confirmation: ["approved_awaiting_cash", "rejected", "cancelled"],
+  approved_awaiting_cash: ["payment_confirmed", "queued", "rejected", "cancelled"],
+  payment_confirmed: ["queued", "printing", "cancelled"],
+  queued: ["printing", "cancelled"],
+  under_review: ["approved_awaiting_cash", "payment_confirmed", "printing", "rejected", "cancelled"],
+  printing: ["completed", "rejected", "failed"],
   completed: [],
   rejected: [],
-  cancelled: []
+  cancelled: [],
+  failed: []
 };
 
 /**
  * Submit print job by public customer
  */
 async function submitPrintJob(data) {
-  const { centerId, fileName, fileSizeBytes, mimeType, pageCount, copies, colorMode, duplex, paperSize, customerNote } = data;
+  const { centerId, fileName, fileSizeBytes, mimeType, pageCount, copies, colorMode, duplex, paperSize, customerNote, paymentMethod } = data;
 
   if (!centerId || !fileName || !fileSizeBytes) {
     throw new Error("INVALID_ARGUMENT: Missing required print job parameters.");
@@ -40,7 +45,7 @@ async function submitPrintJob(data) {
   }
   const centerDoc = centerSnap.docs[0];
   const centerData = centerDoc.data();
-  if (centerData.status !== "active") {
+  if (centerData.status !== "active" || centerData.isOpen === false) {
     throw new Error("FAILED_PRECONDITION: Center is not currently accepting print jobs.");
   }
 
@@ -57,6 +62,7 @@ async function submitPrintJob(data) {
   const expiresAt = new Date(Date.now() + 24 * 3600000); // 24-hr expiry
 
   const sanitizedFileName = String(fileName).replace(/[^a-zA-Z0-9._-]/g, "_");
+  const initialStatus = (paymentMethod === "cash" || !paymentMethod) ? "pending_confirmation" : "submitted";
 
   await jobRef.set({
     jobId: jobRef.id,
@@ -71,7 +77,9 @@ async function submitPrintJob(data) {
     colorMode: colorMode === "color" ? "color" : "monochrome",
     duplex: Boolean(duplex),
     paperSize: ["A4", "A3", "Legal", "Letter"].includes(paperSize) ? paperSize : "A4",
-    status: "submitted",
+    paymentMethod: paymentMethod || "cash",
+    paymentStatus: "pending",
+    status: initialStatus,
     customerNote: customerNote ? String(customerNote).substring(0, 200) : "",
     createdAt: now,
     updatedAt: now,

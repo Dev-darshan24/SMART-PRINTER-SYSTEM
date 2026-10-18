@@ -119,14 +119,26 @@ export function formatTimeAgo(isoString) {
 
 export function getStatusBadge(status) {
   const labels = {
+    pending_confirmation: 'Pending Review',
+    approved_awaiting_cash: 'Awaiting Cash',
+    payment_confirmed: 'Paid / Queued',
+    queued: 'Queued',
     submitted: 'Submitted',
     under_review: 'Under Review',
     printing: 'Printing',
     completed: 'Completed',
     rejected: 'Rejected',
-    cancelled: 'Cancelled'
+    cancelled: 'Cancelled',
+    failed: 'Failed'
   };
-  return `<span class="badge badge-${status}"><span class="badge-dot"></span>${labels[status] || status}</span>`;
+  const cssClass = {
+    pending_confirmation: 'submitted',
+    approved_awaiting_cash: 'under-review',
+    payment_confirmed: 'completed',
+    queued: 'completed',
+    failed: 'rejected'
+  }[status] || status;
+  return `<span class="badge badge-${cssClass}"><span class="badge-dot"></span>${labels[status] || status}</span>`;
 }
 
 export function escapeHtml(str) {

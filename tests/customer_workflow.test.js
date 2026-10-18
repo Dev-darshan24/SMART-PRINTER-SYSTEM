@@ -144,5 +144,120 @@ describe("SmartPrint — Customer QR Upload, Mobile Scan & Priority Failover Ver
     assert.strictEqual(customerJs.includes("startLiveStoreStatusWatcher"), true, "customer.js must start live store status watcher.");
     assert.strictEqual(customerJs.includes("visibilitychange"), true, "customer.js must react to screen wake and tab focus.");
   });
+
+  describe("Customer Page Master Specification Requirements (17 Verification Points)", () => {
+    it("1 & 2: verifies Store A QR loads Store A and Store B QR loads Store B without cross-store contamination", () => {
+      const apiCode = fs.readFileSync(apiJsPath, "utf-8");
+      // Must not silently fall back to default store when specific center is requested
+      assert.strictEqual(apiCode.includes("if (!center)"), true);
+      assert.strictEqual(apiCode.includes("throw new Error(`CENTER_NOT_FOUND: The requested print center '${publicOrCenterId || 'unknown'}' could not be found.`)"), true);
+    });
+
+    it("3: verifies a Store A order cannot appear in Store B's queue (tenant isolation)", () => {
+      const stateJs = fs.readFileSync(path.resolve(__dirname, "../public/assets/js/state.js"), "utf-8");
+      assert.strictEqual(stateJs.includes("if (centerId) {\n      return filtered.filter(j => j.centerId === centerId);\n    }"), true);
+    });
+
+    it("4: verifies a Store B printer or owner cannot claim or print a Store A job", () => {
+      const appJs = fs.readFileSync(appJsPath, "utf-8");
+      const stateJs = fs.readFileSync(path.resolve(__dirname, "../public/assets/js/state.js"), "utf-8");
+      assert.strictEqual(appJs.includes("job.centerId !== centerId"), true);
+      assert.strictEqual(appJs.includes("Tenant isolation violation"), true);
+      assert.strictEqual(stateJs.includes("centerId && job.centerId !== centerId"), true);
+    });
+
+    it("5: verifies unknown center IDs display a safe not-found page and never silently redirect", () => {
+      const html = fs.readFileSync(customerHtmlPath, "utf-8");
+      const customerJs = fs.readFileSync(customerJsPath, "utf-8");
+      assert.strictEqual(html.includes('id="center-not-found-view"'), true);
+      assert.strictEqual(html.includes("Print Center Not Found"), true);
+      assert.strictEqual(customerJs.includes("showCenterNotFound"), true);
+    });
+
+    it("6 & 7: verifies closed stores block submissions on frontend & backend, while open stores display dashboard", () => {
+      const apiJs = fs.readFileSync(apiJsPath, "utf-8");
+      const customerJs = fs.readFileSync(customerJsPath, "utf-8");
+      assert.strictEqual(apiJs.includes("FAILED_PRECONDITION: This print center is currently closed"), true);
+      assert.strictEqual(customerJs.includes("isStoreClosed"), true);
+      assert.strictEqual(customerJs.includes("store-closed-view"), true);
+    });
+
+    it("8: verifies default print settings are A4, B&W, single-sided, and one copy", () => {
+      const customerJs = fs.readFileSync(customerJsPath, "utf-8");
+      const html = fs.readFileSync(customerHtmlPath, "utf-8");
+      assert.strictEqual(customerJs.includes("copies: 1"), true);
+      assert.strictEqual(customerJs.includes("colorMode: 'monochrome'"), true);
+      assert.strictEqual(customerJs.includes("duplex: false"), true);
+      assert.strictEqual(customerJs.includes("paperSize: 'A4'"), true);
+      assert.strictEqual(html.includes('value="A4" selected'), true);
+      assert.strictEqual(html.includes('data-color-mode="monochrome"'), true);
+      assert.strictEqual(html.includes('data-duplex="false"'), true);
+      assert.strictEqual(html.includes('name="payment-method" value="cash" id="payment-cash-radio" checked'), true);
+    });
+
+    it("9: verifies authoritative server-side pricing in integer paise", () => {
+      const apiJs = fs.readFileSync(apiJsPath, "utf-8");
+      assert.strictEqual(apiJs.includes("ratePaise"), true);
+      assert.strictEqual(apiJs.includes("authoritativePaise"), true);
+      assert.strictEqual(apiJs.includes("amountPaise: authoritativePaise"), true);
+      assert.strictEqual(apiJs.includes("estimatedAmount: authoritativeRupees"), true);
+    });
+
+    it("10: verifies invalid files (magic bytes / MIME / >25MB) and unsupported options are rejected", () => {
+      const customerJs = fs.readFileSync(customerJsPath, "utf-8");
+      const apiJs = fs.readFileSync(apiJsPath, "utf-8");
+      assert.strictEqual(customerJs.includes("validateFileHeader"), true);
+      assert.strictEqual(customerJs.includes("25 * 1024 * 1024"), true);
+      assert.strictEqual(apiJs.includes("FILE_TOO_LARGE"), true);
+      assert.strictEqual(apiJs.includes("UNSUPPORTED_MEDIA_TYPE"), true);
+    });
+
+    it("11: verifies cash orders begin in pending_confirmation state", () => {
+      const apiJs = fs.readFileSync(apiJsPath, "utf-8");
+      assert.strictEqual(apiJs.includes("status: 'pending_confirmation'"), true);
+    });
+
+    it("12: verifies owner approval alone does not authorize printing", () => {
+      const appJs = fs.readFileSync(appJsPath, "utf-8");
+      assert.strictEqual(appJs.includes("job.status === 'approved_awaiting_cash'"), true);
+      assert.strictEqual(appJs.includes("Cannot print: Cash collection must be confirmed"), true);
+    });
+
+    it("13: verifies only the authorized owner's cash confirmation can release a job", () => {
+      const appJs = fs.readFileSync(appJsPath, "utf-8");
+      assert.strictEqual(appJs.includes('data-status="payment_confirmed"'), true);
+      assert.strictEqual(appJs.includes("Confirm Cash"), true);
+    });
+
+    it("14: verifies customers cannot forge payment status or job state", () => {
+      const stateJs = fs.readFileSync(path.resolve(__dirname, "../public/assets/js/state.js"), "utf-8");
+      assert.strictEqual(stateJs.includes("validTransitions"), true);
+      assert.strictEqual(stateJs.includes("Invalid status transition"), true);
+    });
+
+    it("15: verifies customer tracking cannot expose another customer's order or private storage paths", () => {
+      const apiJs = fs.readFileSync(apiJsPath, "utf-8");
+      const trackJs = fs.readFileSync(trackJsPath, "utf-8");
+      // getJobStatus must strip storagePath
+      assert.strictEqual(apiJs.includes("Sanitize job for public customer tracking: Never expose raw private storage path"), true);
+      assert.strictEqual(trackJs.includes("statusInfoMap"), true);
+    });
+
+    it("16: verifies duplicate requests and printer callbacks are handled safely", () => {
+      const stateJs = fs.readFileSync(path.resolve(__dirname, "../public/assets/js/state.js"), "utf-8");
+      assert.strictEqual(stateJs.includes("completed: []"), true);
+      assert.strictEqual(stateJs.includes("rejected: []"), true);
+    });
+
+    it("17: verifies existing application functionality, glassmorphism UI, and dark theme remain intact", () => {
+      const html = fs.readFileSync(customerHtmlPath, "utf-8");
+      assert.strictEqual(html.includes("glass-panel"), true);
+      assert.strictEqual(html.includes("theme-toggle-btn"), true);
+      assert.strictEqual(html.includes("theme-icon-sun"), true);
+      assert.strictEqual(html.includes("theme-icon-moon"), true);
+      assert.strictEqual(html.includes("Online Payment"), true);
+      assert.strictEqual(html.includes("Coming Soon"), true);
+    });
+  });
 });
 

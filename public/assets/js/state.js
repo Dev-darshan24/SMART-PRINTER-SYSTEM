@@ -134,6 +134,11 @@ class StateStore {
     return null;
   }
 
+  getCenterByPublicId(publicId) {
+    if (!publicId) return null;
+    return this.getCenter(publicId);
+  }
+
   saveCenter(center) {
     if (!center || !center.centerId) return;
     const cleanedCenter = { ...center };
@@ -176,6 +181,11 @@ class StateStore {
     return filtered;
   }
 
+  getJob(jobId) {
+    if (!jobId) return null;
+    return this.getJobs().find(j => j.jobId === jobId) || null;
+  }
+
   getJobByToken(token) {
     const jobs = this.getJobs();
     const cleanToken = token.trim().toUpperCase();
@@ -195,19 +205,29 @@ class StateStore {
     return jobs[idx >= 0 ? idx : 0];
   }
 
-  updateJobStatus(jobId, newStatus, actor = "owner") {
+  updateJobStatus(jobId, newStatus, actor = "owner", centerId = null) {
     const validTransitions = {
-      submitted: ["under_review", "cancelled", "rejected"],
-      under_review: ["printing", "rejected", "cancelled"],
-      printing: ["completed", "rejected"],
+      submitted: ["under_review", "approved_awaiting_cash", "cancelled", "rejected"],
+      pending_confirmation: ["approved_awaiting_cash", "rejected", "cancelled"],
+      approved_awaiting_cash: ["payment_confirmed", "queued", "rejected", "cancelled"],
+      payment_confirmed: ["queued", "printing", "cancelled"],
+      queued: ["printing", "cancelled"],
+      under_review: ["approved_awaiting_cash", "payment_confirmed", "printing", "rejected", "cancelled"],
+      printing: ["completed", "rejected", "failed"],
       completed: [],
       rejected: [],
-      cancelled: []
+      cancelled: [],
+      failed: []
     };
 
     const jobs = this.getJobs();
     const job = jobs.find(j => j.jobId === jobId);
     if (!job) throw new Error("Job not found");
+
+    // Tenant isolation verification: enforce center matching
+    if (centerId && job.centerId !== centerId) {
+      throw new Error("PERMISSION_DENIED: Tenant isolation violation. Cannot alter order for another print center.");
+    }
 
     const allowed = validTransitions[job.status] || [];
     if (!allowed.includes(newStatus)) {
@@ -218,6 +238,9 @@ class StateStore {
     job.updatedAt = new Date().toISOString();
     if (newStatus === "completed") {
       job.completedAt = new Date().toISOString();
+    }
+    if (newStatus === "payment_confirmed") {
+      job.paymentStatus = "paid";
     }
 
     localStorage.setItem('smartprint_jobs', JSON.stringify(jobs));

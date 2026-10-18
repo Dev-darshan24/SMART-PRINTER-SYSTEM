@@ -93,43 +93,132 @@ async function loadJob(token, notify = true) {
 }
 
 function renderTrackingDetails(job, container) {
+  const statusInfoMap = {
+    pending_confirmation: {
+      title: "Awaiting Owner Confirmation",
+      desc: "Your print request has been submitted and is waiting for confirmation from the print center.",
+      badgeClass: "badge-submitted",
+      stepIndex: 0
+    },
+    submitted: {
+      title: "Awaiting Confirmation",
+      desc: "Your order is waiting for confirmation from the print center.",
+      badgeClass: "badge-submitted",
+      stepIndex: 0
+    },
+    under_review: {
+      title: "Under Review",
+      desc: "The print center is reviewing your document and settings.",
+      badgeClass: "badge-under-review",
+      stepIndex: 1
+    },
+    approved_awaiting_cash: {
+      title: "Approved • Awaiting Cash Payment",
+      desc: `Your order is approved! Please pay ₹${(job.estimatedAmount || 0).toFixed(2)} cash at the counter to release your prints.`,
+      badgeClass: "badge-under-review",
+      stepIndex: 1
+    },
+    payment_confirmed: {
+      title: "Cash Received • Queued for Printing",
+      desc: "Cash payment confirmed. Your document is queued for the store printer.",
+      badgeClass: "badge-completed",
+      stepIndex: 2
+    },
+    queued: {
+      title: "Queued for Printing",
+      desc: "Your document is in the store printer queue.",
+      badgeClass: "badge-completed",
+      stepIndex: 2
+    },
+    printing: {
+      title: "Printing Now",
+      desc: "Your document is actively being printed by the authorized store printer.",
+      badgeClass: "badge-printing",
+      stepIndex: 3
+    },
+    completed: {
+      title: "Completed • Ready for Pickup",
+      desc: "Your print job is ready! Please collect your prints at the Xerox counter.",
+      badgeClass: "badge-completed",
+      stepIndex: 4
+    },
+    rejected: {
+      title: "Order Rejected",
+      desc: "The print center was unable to accept this print request. Please contact the counter staff.",
+      badgeClass: "badge-rejected",
+      stepIndex: -1
+    },
+    failed: {
+      title: "Print Failed",
+      desc: "A hardware issue occurred while printing. Please speak with the counter staff for immediate resolution.",
+      badgeClass: "badge-rejected",
+      stepIndex: -1
+    },
+    cancelled: {
+      title: "Order Cancelled",
+      desc: "This print request was cancelled.",
+      badgeClass: "badge-rejected",
+      stepIndex: -1
+    }
+  };
+
+  const statusMeta = statusInfoMap[job.status] || {
+    title: job.status.toUpperCase(),
+    desc: "Order status update from print center.",
+    badgeClass: "badge-submitted",
+    stepIndex: 0
+  };
+
   const steps = [
-    { key: 'submitted', label: 'Submitted' },
-    { key: 'under_review', label: 'Reviewing' },
-    { key: 'printing', label: 'Printing' },
-    { key: 'completed', label: 'Ready for Pickup' }
+    { label: 'Submitted' },
+    { label: 'Approved' },
+    { label: 'Cash Paid' },
+    { label: 'Printing' },
+    { label: 'Ready' }
   ];
 
-  const currentIdx = steps.findIndex(s => s.key === job.status);
+  const currentIdx = statusMeta.stepIndex;
+  const isTerminalNegative = ['rejected', 'failed', 'cancelled'].includes(job.status);
 
   container.innerHTML = `
     <div class="tracking-card" style="margin-top: 1.5rem;">
-      <span class="badge ${job.status === 'completed' ? 'badge-completed' : 'badge-under-review'}" style="margin-bottom: 0.5rem;">
-        Status: ${job.status.toUpperCase()}
+      <span class="badge ${statusMeta.badgeClass}" style="margin-bottom: 0.5rem; font-size: 0.8125rem;">
+        ${escapeHtml(statusMeta.title)}
       </span>
+
+      <p class="text-sm" style="color: var(--text-main); margin-bottom: 1.25rem; font-weight: 500;">
+        ${escapeHtml(statusMeta.desc)}
+      </p>
       
       <h2>Pickup Code</h2>
       <div class="tracking-code-pill" id="copy-tracking-pill" style="cursor: pointer;" title="Click to copy">
         ${escapeHtml(job.trackingToken)}
         ${ICONS.copy}
       </div>
-      <p class="text-sm text-muted">Show this code at the Xerox counter to collect your prints.</p>
+      <p class="text-sm text-muted">Show this code at the Xerox counter to verify and collect your prints.</p>
 
       <!-- Stepper timeline -->
-      <div class="stepper-timeline">
-        ${steps.map((step, idx) => {
-          let stateClass = '';
-          if (idx < currentIdx) stateClass = 'completed';
-          else if (idx === currentIdx) stateClass = 'current';
-          
-          return `
-            <div class="step-item ${stateClass}">
-              <div class="step-circle">${idx < currentIdx ? ICONS.check : (idx + 1)}</div>
-              <div class="step-title">${step.label}</div>
-            </div>
-          `;
-        }).join('')}
-      </div>
+      ${!isTerminalNegative ? `
+        <div class="stepper-timeline">
+          ${steps.map((step, idx) => {
+            let stateClass = '';
+            if (idx < currentIdx) stateClass = 'completed';
+            else if (idx === currentIdx) stateClass = 'current';
+            
+            return `
+              <div class="step-item ${stateClass}">
+                <div class="step-circle">${idx < currentIdx ? ICONS.check : (idx + 1)}</div>
+                <div class="step-title">${step.label}</div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      ` : `
+        <div class="alert alert-error" style="margin-top: 1rem; text-align: left; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--error-solid); border-radius: var(--radius-md); padding: 0.75rem 1rem;">
+          <strong>Order Status: ${escapeHtml(statusMeta.title)}</strong>
+          <p class="text-xs" style="margin-top: 0.25rem;">${escapeHtml(statusMeta.desc)}</p>
+        </div>
+      `}
 
       <!-- Job summary grid -->
       <div class="glass-panel" style="padding: 1.25rem; text-align: left; margin-top: 1.5rem; background: var(--bg-surface-subtle);">
