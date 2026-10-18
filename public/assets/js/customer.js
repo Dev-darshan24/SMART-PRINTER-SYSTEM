@@ -304,14 +304,29 @@ function startLiveStoreStatusWatcher(centerQuery) {
         }
       }
     } catch (e) {
-      // Ignore network blips during silent background polling
+      // Ignore network blips during background polling
     }
   }
 
-  // Periodic automatic polling
-  setInterval(checkLiveStatus, 4000);
+  // 1. Instant 0ms Cross-tab / same-browser synchronization via storage event
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'smartprint_store_status' || (e.key && e.key.startsWith('smartprint_store_status_'))) {
+      const nextIsOpen = e.newValue === 'open';
+      if (lastDetectedIsOpen !== nextIsOpen) {
+        lastDetectedIsOpen = nextIsOpen;
+        if (currentCenter) {
+          currentCenter.isOpen = nextIsOpen;
+          currentCenter.status = nextIsOpen ? 'active' : 'closed';
+          populateCenterInfo(currentCenter);
+        }
+      }
+    }
+  });
 
-  // Instant check when mobile phone screen is awakened or tab regained focus
+  // 2. Real-time background server check every 2 seconds for external phones/devices
+  setInterval(checkLiveStatus, 2000);
+
+  // 3. Instant check when mobile phone screen is awakened or tab regained focus
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
       checkLiveStatus();
