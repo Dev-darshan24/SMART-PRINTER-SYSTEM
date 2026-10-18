@@ -32,6 +32,10 @@ class AuthController {
     return authManager.logout();
   }
 
+  saveSession() {
+    return authManager.saveSession();
+  }
+
   protectPage(allowedRoles = []) {
     const user = this.getCurrentUser();
     if (!user) {

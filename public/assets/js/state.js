@@ -5,6 +5,43 @@
 
 import { INITIAL_CENTERS, INITIAL_JOBS, INITIAL_PLANS, INITIAL_AUDIT_LOGS } from './fixtures.js';
 
+export const DEMO_PRINTER_NAMES = [
+  'HP LaserJet Pro M404dn',
+  'Epson EcoTank L3250 Series',
+  'Canon imageRUNNER 2525',
+  'Brother MFC-L8690CDW',
+  'Ricoh Aficio MP 2014',
+  'Konica Minolta bizhub 225i',
+  'TVS MSP 240 Star'
+];
+
+export function isDemoPrinterName(name) {
+  if (!name || typeof name !== 'string') return false;
+  const n = name.trim().toLowerCase();
+  if (n === 'none' || n.includes('scanning') || n.includes('no printer')) return false;
+  return DEMO_PRINTER_NAMES.some(d => d.toLowerCase() === n) ||
+         n.includes('demo') ||
+         n.includes('sample') ||
+         n.includes('fake');
+}
+
+export function cleanPrinterRouting(routing) {
+  if (!routing || typeof routing !== 'object') {
+    return { bwPriority: [], colorPriority: [], autoFailover: true, autoDuplexMatch: true };
+  }
+  const cleanList = (list) => {
+    if (!Array.isArray(list)) return [];
+    return list.filter(p => p && p !== 'None' && !isDemoPrinterName(p) && !p.includes('No printer') && !p.includes('Scanning'));
+  };
+  return {
+    ...routing,
+    bwPriority: cleanList(routing.bwPriority),
+    colorPriority: cleanList(routing.colorPriority),
+    autoFailover: routing.autoFailover !== false,
+    autoDuplexMatch: routing.autoDuplexMatch !== false
+  };
+}
+
 class StateStore {
   constructor() {
     this.listeners = new Set();
@@ -12,12 +49,33 @@ class StateStore {
   }
 
   init() {
-    // Purge legacy demo fixture data if present
-    const demoCleanedKey = 'smartprint_demo_cleared_v1';
+    // Purge legacy demo fixture data and demo printer sequence routing if present
+    const demoCleanedKey = 'smartprint_demo_cleared_v2';
     if (!localStorage.getItem(demoCleanedKey)) {
       localStorage.removeItem('smartprint_centers');
       localStorage.removeItem('smartprint_jobs');
       localStorage.removeItem('smartprint_audit_logs');
+
+      // Purge demo printer routing stored in localStorage
+      try {
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const key = localStorage.key(i);
+          if (key && (key.startsWith('smartprint_routing_') || key.startsWith('smartprint_center_'))) {
+            const raw = localStorage.getItem(key);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (key.startsWith('smartprint_routing_')) {
+                const cleaned = cleanPrinterRouting(parsed);
+                localStorage.setItem(key, JSON.stringify(cleaned));
+              } else if (parsed && parsed.printerRouting) {
+                parsed.printerRouting = cleanPrinterRouting(parsed.printerRouting);
+                localStorage.setItem(key, JSON.stringify(parsed));
+              }
+            }
+          }
+        }
+      } catch (e) {}
+
       localStorage.setItem(demoCleanedKey, 'true');
     }
 
@@ -33,8 +91,18 @@ class StateStore {
   getCenters() {
     const list = JSON.parse(localStorage.getItem('smartprint_centers') || '[]');
     const demoCenterIds = ['center_koramangala', 'center_indiranagar', 'center_whitefield'];
-    const filtered = list.filter(c => !demoCenterIds.includes(c.centerId));
-    if (filtered.length !== list.length) {
+    let modified = false;
+    const filtered = list.filter(c => !demoCenterIds.includes(c.centerId)).map(c => {
+      if (c.printerRouting) {
+        const cleaned = cleanPrinterRouting(c.printerRouting);
+        if (JSON.stringify(cleaned) !== JSON.stringify(c.printerRouting)) {
+          c.printerRouting = cleaned;
+          modified = true;
+        }
+      }
+      return c;
+    });
+    if (filtered.length !== list.length || modified) {
       localStorage.setItem('smartprint_centers', JSON.stringify(filtered));
     }
     return filtered;
@@ -43,23 +111,45 @@ class StateStore {
   getCenter(centerId) {
     if (!centerId) return this.getCenters()[0] || null;
     const cidStr = String(centerId).trim();
-    return this.getCenters().find(c => 
+    const found = this.getCenters().find(c => 
       c.centerId === cidStr || 
       c.publicId === cidStr || 
       String(c.uniqueId) === cidStr ||
       ('CTR-' + String(c.uniqueId || '').substring(0, 6)) === cidStr
-    ) || this.getCenters()[0] || null;
+    );
+    if (found) return found;
+
+    // Check user-specific direct storage
+    const directRaw = localStorage.getItem(`smartprint_center_${cidStr}`);
+    if (directRaw) {
+      try {
+        const parsed = JSON.parse(directRaw);
+        if (parsed && parsed.printerRouting) {
+          parsed.printerRouting = cleanPrinterRouting(parsed.printerRouting);
+        }
+        return parsed;
+      } catch (e) {}
+    }
+
+    return null;
   }
 
   saveCenter(center) {
+    if (!center || !center.centerId) return;
+    const cleanedCenter = { ...center };
+    if (cleanedCenter.printerRouting) {
+      cleanedCenter.printerRouting = cleanPrinterRouting(cleanedCenter.printerRouting);
+    }
     const centers = this.getCenters();
-    const idx = centers.findIndex(c => c.centerId === center.centerId);
+    const idx = centers.findIndex(c => c.centerId === cleanedCenter.centerId);
+    const updated = { ...(centers[idx] || {}), ...cleanedCenter, updatedAt: new Date().toISOString() };
     if (idx >= 0) {
-      centers[idx] = { ...centers[idx], ...center, updatedAt: new Date().toISOString() };
+      centers[idx] = updated;
     } else {
-      centers.push(center);
+      centers.push(updated);
     }
     localStorage.setItem('smartprint_centers', JSON.stringify(centers));
+    localStorage.setItem(`smartprint_center_${cleanedCenter.centerId}`, JSON.stringify(updated));
     this.notify('centers', centers);
   }
 
@@ -199,7 +289,16 @@ class StateStore {
     localStorage.removeItem('smartprint_jobs');
     localStorage.removeItem('smartprint_plans');
     localStorage.removeItem('smartprint_audit_logs');
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('smartprint_routing_') || key.startsWith('smartprint_rates_') || key.startsWith('smartprint_center_'))) {
+          localStorage.removeItem(key);
+        }
+      }
+    } catch (e) {}
     localStorage.setItem('smartprint_demo_cleared_v1', 'true');
+    localStorage.setItem('smartprint_demo_cleared_v2', 'true');
     this.init();
     window.location.reload();
   }

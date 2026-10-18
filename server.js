@@ -333,14 +333,5 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`\n==================================================`);
-  console.log(`  SmartPrint Xerox System is running locally!`);
-  console.log(`  URL: http://localhost:${PORT}`);
-  console.log(`==================================================\n`);
-  console.log(`- Landing Page:          http://localhost:${PORT}/`);
-  console.log(`- Customer Upload:       http://localhost:${PORT}/customer/?center=KOR-7721`);
-  console.log(`- Live Tracking:         http://localhost:${PORT}/customer/track.html?token=XP-8492-9104`);
-  console.log(`- Owner Dashboard:       http://localhost:${PORT}/app/`);
-  console.log(`- Superadmin Portal:     http://localhost:${PORT}/admin/`);
-  console.log(`- Management Login:      http://localhost:${PORT}/login.html\n`);
+  console.log(`Server running at: http://localhost:${PORT}/`);
 });

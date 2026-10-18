@@ -34,8 +34,253 @@ let currentFilter = 'all';
 let currentActiveView = 'queue';
 let currentHistoryRange = 'all';
 let currentAnalyticsRange = 'all';
+export let currentDetectedPrinters = [];
+
+export const DEMO_PRINTER_NAMES = [
+  'HP LaserJet Pro M404dn',
+  'Epson EcoTank L3250 Series',
+  'Canon imageRUNNER 2525',
+  'Brother MFC-L8690CDW',
+  'Ricoh Aficio MP 2014',
+  'Konica Minolta bizhub 225i',
+  'TVS MSP 240 Star'
+];
+
+export function isDemoPrinterName(name) {
+  if (!name || typeof name !== 'string') return false;
+  const n = name.trim().toLowerCase();
+  if (n === 'none' || n.includes('scanning') || n.includes('no printer')) return false;
+  return DEMO_PRINTER_NAMES.some(d => d.toLowerCase() === n) ||
+         n.includes('demo') ||
+         n.includes('sample') ||
+         n.includes('fake');
+}
+
+export function cleanPrinterRouting(routing) {
+  if (!routing || typeof routing !== 'object') {
+    return { bwPriority: [], colorPriority: [], autoFailover: true, autoDuplexMatch: true };
+  }
+  const cleanList = (list) => {
+    if (!Array.isArray(list)) return [];
+    return list.filter(p => p && p !== 'None' && !isDemoPrinterName(p) && !p.includes('No printer') && !p.includes('Scanning'));
+  };
+  return {
+    ...routing,
+    bwPriority: cleanList(routing.bwPriority),
+    colorPriority: cleanList(routing.colorPriority),
+    autoFailover: routing.autoFailover !== false,
+    autoDuplexMatch: routing.autoDuplexMatch !== false
+  };
+}
+
+export const STORE_HARDWARE_PRESETS = [];
+
+export function buildPrinterOptionsHtml(selectedPrinterName, isFirstSlot = false) {
+  const externalPrinters = (currentDetectedPrinters || []).filter(p => !p.isVirtual && p.isExternal !== false && !isDemoPrinterName(p.name));
+  const optionsMap = new Map();
+
+  // 1. Only real detected external hardware printers physically connected to this device
+  externalPrinters.forEach(p => {
+    if (!isDemoPrinterName(p.name)) {
+      optionsMap.set(p.name, `${escapeHtml(p.name)} (${escapeHtml(p.port || 'USB/Local')})`);
+    }
+  });
+
+  // Verify whether selectedPrinterName is currently connected to this device
+  const isSelectedConnected = Boolean(
+    selectedPrinterName && 
+    selectedPrinterName !== 'None' && 
+    !selectedPrinterName.includes('No printer') && 
+    !selectedPrinterName.includes('Scanning') && 
+    !isDemoPrinterName(selectedPrinterName) &&
+    optionsMap.has(selectedPrinterName)
+  );
+
+  let html = '';
+  optionsMap.forEach((label, name) => {
+    const isSelected = isSelectedConnected && selectedPrinterName === name;
+    html += `<option value="${escapeHtml(name)}"${isSelected ? ' selected' : ''}>${label}</option>`;
+  });
+
+  // 2. None option
+  // When no physical printers are connected to device, show "No printer connected to device"
+  const isNoneSelected = !isSelectedConnected;
+  const noneLabel = optionsMap.size > 0 ? 'None (Do Not Failover)' : 'No printer connected to device';
+  html += `<option value="None"${isNoneSelected ? ' selected' : ''}>${noneLabel}</option>`;
+
+  return html;
+}
+
+
+export function shortenPrinterName(name) {
+  if (!name || name === 'None') return 'None';
+  if (name.length > 18) return name.substring(0, 16) + '..';
+  return name;
+}
+
+export function updatePrioritySummaryBadge() {
+  const summaryBadge = document.getElementById('priority-rule-summary');
+  if (!summaryBadge) return;
+
+  const bwContainer = document.getElementById('bw-priority-steps-list');
+  const colorContainer = document.getElementById('color-priority-steps-list');
+
+  const bwSelects = bwContainer
+    ? Array.from(bwContainer.querySelectorAll('select'))
+    : [document.getElementById('seq-bw-p1'), document.getElementById('seq-bw-p2'), document.getElementById('seq-bw-p3')].filter(Boolean);
+
+  const colSelects = colorContainer
+    ? Array.from(colorContainer.querySelectorAll('select'))
+    : [document.getElementById('seq-color-p1'), document.getElementById('seq-color-p2'), document.getElementById('seq-color-p3')].filter(Boolean);
+
+  const bwPrinters = bwSelects
+    .map(s => s?.value)
+    .filter(p => p && p !== 'None' && !p.includes('Scanning') && !p.includes('No printer') && !isDemoPrinterName(p));
+
+  const colPrinters = colSelects
+    .map(s => s?.value)
+    .filter(p => p && p !== 'None' && !p.includes('Scanning') && !p.includes('No printer') && !isDemoPrinterName(p));
+
+  const bw1 = document.getElementById('seq-bw-p1')?.value;
+  const bw2 = document.getElementById('seq-bw-p2')?.value;
+  const col1 = document.getElementById('seq-color-p1')?.value;
+  const col2 = document.getElementById('seq-color-p2')?.value;
+
+  if (bwPrinters.length === 0 && colPrinters.length === 0 && (!bw1 || bw1 === 'None' || bw1.includes('Scanning') || bw1.includes('No printer') || isDemoPrinterName(bw1))) {
+    summaryBadge.textContent = "No printers connected to this device";
+    summaryBadge.className = "badge badge-rejected text-xs font-semibold";
+    return;
+  }
+
+  const bwChain = bwPrinters.length > 0
+    ? bwPrinters.map(shortenPrinterName).join(' → ')
+    : (bw1 && bw1 !== 'None' && !bw1.includes('Scanning') && !bw1.includes('No printer') && !isDemoPrinterName(bw1) ? shortenPrinterName(bw1) : 'None');
+  const colChain = colPrinters.length > 0
+    ? colPrinters.map(shortenPrinterName).join(' → ')
+    : (col1 && col1 !== 'None' && !col1.includes('Scanning') && !col1.includes('No printer') && !isDemoPrinterName(col1) ? shortenPrinterName(col1) : 'None');
+
+  summaryBadge.textContent = `B&W: ${bwChain} | Colour: ${colChain}`;
+  summaryBadge.className = "badge badge-submitted text-xs font-semibold";
+}
+
+export function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('smartprint_theme', theme);
+  const themeToggleBtn = document.getElementById('theme-toggle-btn');
+  const themeIconSun = document.getElementById('theme-icon-sun');
+  const themeIconMoon = document.getElementById('theme-icon-moon');
+  if (theme === 'dark') {
+    if (themeIconSun) themeIconSun.style.display = 'inline-flex';
+    if (themeIconMoon) themeIconMoon.style.display = 'none';
+    if (themeToggleBtn) themeToggleBtn.setAttribute('title', 'Switch to Light Theme');
+  } else {
+    if (themeIconSun) themeIconSun.style.display = 'none';
+    if (themeIconMoon) themeIconMoon.style.display = 'inline-flex';
+    if (themeToggleBtn) themeToggleBtn.setAttribute('title', 'Switch to Dark Theme');
+  }
+}
+
+export function initThemeToggle() {
+  const themeToggleBtn = document.getElementById('theme-toggle-btn');
+  const initialTheme = localStorage.getItem('smartprint_theme') || 'light';
+  applyTheme(initialTheme);
+
+  if (themeToggleBtn) {
+    themeToggleBtn.onclick = (e) => {
+      if (e) e.preventDefault();
+      const currentTheme = document.documentElement.getAttribute('data-theme') || localStorage.getItem('smartprint_theme') || 'light';
+      const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      applyTheme(nextTheme);
+    };
+  }
+}
+
+export function initSidebarControls() {
+  const sidebar = document.getElementById('app-sidebar');
+  const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn');
+  const sidebarHideBtn = document.getElementById('sidebar-hide-btn');
+  const sidebarBackdrop = document.getElementById('sidebar-backdrop');
+
+  const isMobile = () => window.innerWidth <= 1024;
+
+  const exposeSidebar = () => {
+    sidebar?.classList.remove('sidebar-hidden');
+    sidebar?.classList.add('sidebar-exposed');
+    if (isMobile()) {
+      sidebarBackdrop?.classList.add('active');
+    }
+    localStorage.setItem('smartprint_sidebar_state', 'exposed');
+    sidebarToggleBtn?.setAttribute('aria-expanded', 'true');
+  };
+
+  const hideSidebar = () => {
+    sidebar?.classList.add('sidebar-hidden');
+    sidebar?.classList.remove('sidebar-exposed');
+    sidebarBackdrop?.classList.remove('active');
+    localStorage.setItem('smartprint_sidebar_state', 'hidden');
+    sidebarToggleBtn?.setAttribute('aria-expanded', 'false');
+  };
+
+  const toggleSidebar = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const isHidden = sidebar?.classList.contains('sidebar-hidden') || 
+                     (!sidebar?.classList.contains('sidebar-exposed') && isMobile());
+    if (isHidden) {
+      exposeSidebar();
+    } else {
+      hideSidebar();
+    }
+  };
+
+  // Restore saved desktop state preference
+  if (!isMobile()) {
+    const savedState = localStorage.getItem('smartprint_sidebar_state');
+    if (savedState === 'hidden') {
+      sidebar?.classList.add('sidebar-hidden');
+      sidebar?.classList.remove('sidebar-exposed');
+      sidebarToggleBtn?.setAttribute('aria-expanded', 'false');
+    } else {
+      sidebar?.classList.remove('sidebar-hidden');
+      sidebar?.classList.add('sidebar-exposed');
+      sidebarToggleBtn?.setAttribute('aria-expanded', 'true');
+    }
+  } else {
+    sidebarToggleBtn?.setAttribute('aria-expanded', 'false');
+  }
+
+  // Event Listeners for Slide Bar controls (single-click hide and expose)
+  if (sidebarToggleBtn && !sidebarToggleBtn.__boundToggle) {
+    sidebarToggleBtn.__boundToggle = true;
+    sidebarToggleBtn.addEventListener('click', toggleSidebar);
+  }
+  if (sidebarHideBtn && !sidebarHideBtn.__boundToggle) {
+    sidebarHideBtn.__boundToggle = true;
+    sidebarHideBtn.addEventListener('click', toggleSidebar);
+  }
+  if (sidebarBackdrop && !sidebarBackdrop.__boundToggle) {
+    sidebarBackdrop.__boundToggle = true;
+    sidebarBackdrop.addEventListener('click', hideSidebar);
+  }
+
+  return { exposeSidebar, hideSidebar, toggleSidebar, isMobile };
+}
+
+// Auto-run theme and sidebar shell as soon as DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    initThemeToggle();
+    initSidebarControls();
+  });
+} else {
+  initThemeToggle();
+  initSidebarControls();
+}
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Always ensure shell controls are bound
+  initThemeToggle();
+  initSidebarControls();
+
   // Protect page
   if (!auth.protectPage([USER_ROLES.OWNER, USER_ROLES.SUPERADMIN])) return;
 
@@ -49,7 +294,42 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!centerId) {
     centerId = stateStore.getCenters()[0]?.centerId || null;
   }
+
+  // Retrieve user-isolated cached rates and routing if saved previously
+  const cachedRates = centerId ? (localStorage.getItem(`smartprint_rates_${centerId}`) || (user?.uid ? localStorage.getItem(`smartprint_rates_${user.uid}`) : null)) : null;
+  let parsedCachedRates = null;
+  if (cachedRates) {
+    try { parsedCachedRates = JSON.parse(cachedRates); } catch (e) {}
+  }
+
+  const cachedRouting = centerId ? (localStorage.getItem(`smartprint_routing_${centerId}`) || (user?.uid ? localStorage.getItem(`smartprint_routing_${user.uid}`) : null)) : null;
+  let parsedCachedRouting = null;
+  if (cachedRouting) {
+    try { parsedCachedRouting = cleanPrinterRouting(JSON.parse(cachedRouting)); } catch (e) {}
+  }
+
   let center = centerId ? stateStore.getCenter(centerId) : null;
+  if (!center && centerId) {
+    center = {
+      centerId,
+      id: centerId,
+      ownerUid: user?.uid,
+      ownerEmail: user?.email,
+      storeName: user?.displayName ? `${user.displayName}'s Center` : 'SmartPrint Hub',
+      rates: parsedCachedRates || { bwSingle: 2.0, bwDouble: 3.5, colorSingle: 10.0, colorDouble: 18.0 },
+      printerRouting: parsedCachedRouting || { bwPriority: [], colorPriority: [], autoFailover: true, autoDuplexMatch: true }
+    };
+    stateStore.saveCenter(center);
+  } else if (center) {
+    if (parsedCachedRates && (!center.rates || Object.keys(center.rates).length === 0)) {
+      center.rates = parsedCachedRates;
+    }
+    if (parsedCachedRouting && (!center.printerRouting || (!center.printerRouting.bwPriority && !center.printerRouting.colorPriority))) {
+      center.printerRouting = parsedCachedRouting;
+    } else if (center.printerRouting) {
+      center.printerRouting = cleanPrinterRouting(center.printerRouting);
+    }
+  }
 
   // Initialize UI header & profile
   const centerNameEl = document.getElementById('current-center-name');
@@ -77,13 +357,75 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Render KPIs, Queue, History, Analytics, Subscription, and Profile
-  renderKPIs(centerId);
-  renderQueue(centerId);
-  renderHistory(centerId);
-  renderAnalytics(centerId);
-  renderSubscription(center);
-  populateProfileForm(center, user);
+  // Restore user-isolated settings immediately on load and sync
+  function restoreUserSettings(centerToRestore = null) {
+    const activeUser = user || auth.getCurrentUser();
+    const effectiveCenterId = centerToRestore?.centerId || centerId || activeUser?.centerId;
+    const c = centerToRestore || (effectiveCenterId ? stateStore.getCenter(effectiveCenterId) : null) || {};
+
+    // 1. RATES: Try centerObj.rates, then localStorage per-center, then localStorage per-user
+    let ratesToApply = c.rates;
+    if (!ratesToApply && effectiveCenterId) {
+      const rawCenterRates = localStorage.getItem(`smartprint_rates_${effectiveCenterId}`);
+      if (rawCenterRates) {
+        try { ratesToApply = JSON.parse(rawCenterRates); } catch (e) {}
+      }
+    }
+    if (!ratesToApply && activeUser?.uid) {
+      const rawUserRates = localStorage.getItem(`smartprint_rates_${activeUser.uid}`);
+      if (rawUserRates) {
+        try { ratesToApply = JSON.parse(rawUserRates); } catch (e) {}
+      }
+    }
+
+    if (ratesToApply) {
+      c.rates = ratesToApply;
+      const setInput = (id, val) => {
+        const el = document.getElementById(id);
+        if (el && val !== undefined && val !== null) el.value = val;
+      };
+      setInput('rate-bw-single', ratesToApply.bwSingle);
+      setInput('rate-bw-double', ratesToApply.bwDouble);
+      setInput('rate-color-single', ratesToApply.colorSingle);
+      setInput('rate-color-double', ratesToApply.colorDouble);
+
+      const ratesBadge = document.getElementById('rates-status-badge');
+      if (ratesBadge) {
+        ratesBadge.textContent = "Live Rates";
+        ratesBadge.className = "badge badge-completed text-xs font-semibold";
+      }
+    }
+
+    // 2. PRINTER PRIORITY ROUTING: Try centerObj.printerRouting, then localStorage per-center, then localStorage per-user
+    let routingToApply = c.printerRouting ? cleanPrinterRouting(c.printerRouting) : null;
+    if (!routingToApply && effectiveCenterId) {
+      const rawCenterRouting = localStorage.getItem(`smartprint_routing_${effectiveCenterId}`);
+      if (rawCenterRouting) {
+        try { routingToApply = cleanPrinterRouting(JSON.parse(rawCenterRouting)); } catch (e) {}
+      }
+    }
+    if (!routingToApply && activeUser?.uid) {
+      const rawUserRouting = localStorage.getItem(`smartprint_routing_${activeUser.uid}`);
+      if (rawUserRouting) {
+        try { routingToApply = cleanPrinterRouting(JSON.parse(rawUserRouting)); } catch (e) {}
+      }
+    }
+
+    if (routingToApply) {
+      routingToApply = cleanPrinterRouting(routingToApply);
+      c.printerRouting = routingToApply;
+      populatePrinterSequenceDropdowns(currentDetectedPrinters, routingToApply);
+    }
+  }
+
+  // Render KPIs, Queue, History, Analytics, Subscription, and Profile safely
+  try { renderKPIs(centerId); } catch (e) { console.warn("renderKPIs notice:", e); }
+  try { renderQueue(centerId); } catch (e) { console.warn("renderQueue notice:", e); }
+  try { renderHistory(centerId); } catch (e) { console.warn("renderHistory notice:", e); }
+  try { renderAnalytics(centerId); } catch (e) { console.warn("renderAnalytics notice:", e); }
+  try { renderSubscription(center); } catch (e) { console.warn("renderSubscription notice:", e); }
+  try { populateProfileForm(center, user); } catch (e) { console.warn("populateProfileForm notice:", e); }
+  try { restoreUserSettings(center); } catch (e) { console.warn("restoreUserSettings notice:", e); }
 
   // Asynchronously query Firestore for persisted profile details and sync
   async function syncProfileFromFirestore() {
@@ -135,6 +477,7 @@ document.addEventListener('DOMContentLoaded', () => {
         center = remoteCenter;
         stateStore.saveCenter(remoteCenter);
         populateProfileForm(remoteCenter, user);
+        restoreUserSettings(remoteCenter);
 
         if (centerNameEl) {
           centerNameEl.textContent = remoteCenter.storeName || remoteCenter.name || "Xerox Management Hub";
@@ -159,69 +502,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const profileRoleEl = document.getElementById('profile-user-role');
   if (profileRoleEl) profileRoleEl.textContent = (user.role || USER_ROLES.OWNER).toUpperCase();
 
-  // Slide Bar (Sidebar) Hide & Expose Controls
+  // Slide Bar (Sidebar) Controls
+  const { exposeSidebar, hideSidebar, toggleSidebar, isMobile } = initSidebarControls();
   const sidebar = document.getElementById('app-sidebar');
   const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn');
   const sidebarHideBtn = document.getElementById('sidebar-hide-btn');
   const sidebarBackdrop = document.getElementById('sidebar-backdrop');
-
-  const isMobile = () => window.innerWidth <= 1024;
-
-  const exposeSidebar = () => {
-    if (isMobile()) {
-      sidebar?.classList.add('sidebar-exposed');
-      sidebarBackdrop?.classList.add('active');
-    } else {
-      sidebar?.classList.remove('sidebar-hidden');
-      localStorage.setItem('smartprint_sidebar_state', 'exposed');
-    }
-    sidebarToggleBtn?.setAttribute('aria-expanded', 'true');
-  };
-
-  const hideSidebar = () => {
-    if (isMobile()) {
-      sidebar?.classList.remove('sidebar-exposed');
-      sidebarBackdrop?.classList.remove('active');
-    } else {
-      sidebar?.classList.add('sidebar-hidden');
-      localStorage.setItem('smartprint_sidebar_state', 'hidden');
-    }
-    sidebarToggleBtn?.setAttribute('aria-expanded', 'false');
-  };
-
-  const toggleSidebar = () => {
-    if (isMobile()) {
-      if (sidebar?.classList.contains('sidebar-exposed')) {
-        hideSidebar();
-      } else {
-        exposeSidebar();
-      }
-    } else {
-      if (sidebar?.classList.contains('sidebar-hidden')) {
-        exposeSidebar();
-      } else {
-        hideSidebar();
-      }
-    }
-  };
-
-  // Restore saved desktop state preference
-  if (!isMobile()) {
-    const savedState = localStorage.getItem('smartprint_sidebar_state');
-    if (savedState === 'hidden') {
-      sidebar?.classList.add('sidebar-hidden');
-      sidebarToggleBtn?.setAttribute('aria-expanded', 'false');
-    } else {
-      sidebarToggleBtn?.setAttribute('aria-expanded', 'true');
-    }
-  } else {
-    sidebarToggleBtn?.setAttribute('aria-expanded', 'false');
-  }
-
-  // Event Listeners for Slide Bar controls (single-click hide and expose)
-  sidebarToggleBtn?.addEventListener('click', toggleSidebar);
-  sidebarHideBtn?.addEventListener('click', toggleSidebar);
-  sidebarBackdrop?.addEventListener('click', hideSidebar);
 
   // Close on Escape on mobile
   document.addEventListener('keydown', (e) => {
@@ -900,19 +1186,28 @@ document.addEventListener('DOMContentLoaded', () => {
       return false;
     }
 
-    const currentCenter = stateStore.getCenter(centerId) || {};
+    const effectiveCenterId = centerId || user?.centerId;
+    const currentCenter = (effectiveCenterId ? stateStore.getCenter(effectiveCenterId) : null) || {};
     const newRates = { bwSingle, bwDouble, colorSingle, colorDouble };
 
     stateStore.saveCenter({
       ...currentCenter,
-      centerId,
+      centerId: effectiveCenterId,
+      ownerUid: user?.uid,
       rates: newRates
     });
 
+    if (effectiveCenterId) {
+      localStorage.setItem(`smartprint_rates_${effectiveCenterId}`, JSON.stringify(newRates));
+    }
+    if (user?.uid) {
+      localStorage.setItem(`smartprint_rates_${user.uid}`, JSON.stringify(newRates));
+    }
+
     // Synchronize with Firebase Firestore if online
-    if (centerId && db) {
+    if (effectiveCenterId && db) {
       try {
-        const centerRef = doc(db, 'centers', centerId);
+        const centerRef = doc(db, 'centers', effectiveCenterId);
         await setDoc(centerRef, { rates: newRates, updatedAt: serverTimestamp() }, { merge: true });
       } catch (err) {
         console.warn("Could not save rates to Firestore directly:", err);
@@ -1010,7 +1305,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // -------------------------------------------------------------
   // Settings: 2. Connected Printers Status (REAL Hardware Only)
   // -------------------------------------------------------------
-  let currentDetectedPrinters = [];
+  currentDetectedPrinters = [];
 
   function triggerPrinterTestSlip(printerName) {
     showToast(`Sending hardware test slip to ${printerName}...`, "info");
@@ -1175,89 +1470,337 @@ document.addEventListener('DOMContentLoaded', () => {
     return name;
   }
 
+  function getStepTitle(index) {
+    if (index === 0) return '1st Choice (Primary)';
+    if (index === 1) return '2nd Choice (Failover / Large Batches)';
+    if (index === 2) return '3rd Choice (Backup)';
+    return `${index + 1}th Choice (Failover)`;
+  }
+
+  function getStepBadgeClass(index) {
+    if (index === 0) return 'priority-badge-pill priority-badge-p1';
+    if (index === 1) return 'priority-badge-pill priority-badge-p2';
+    if (index === 2) return 'priority-badge-pill priority-badge-p3';
+    return 'priority-badge-pill priority-badge-pn';
+  }
+
+  function reindexPrioritySteps(type) {
+    const container = document.getElementById(`${type === 'bw' ? 'bw' : 'color'}-priority-steps-list`);
+    if (!container) return;
+    const items = Array.from(container.querySelectorAll('.priority-step-item'));
+    items.forEach((item, idx) => {
+      item.setAttribute('data-index', idx);
+      const titleEl = item.querySelector('.priority-step-title');
+      if (titleEl) titleEl.textContent = getStepTitle(idx);
+
+      const badgeEl = item.querySelector('.priority-badge-pill');
+      if (badgeEl) {
+        badgeEl.textContent = `Priority ${idx + 1}`;
+        badgeEl.className = getStepBadgeClass(idx);
+      }
+
+      const sel = item.querySelector('select');
+      if (sel) {
+        if (idx === 0) sel.id = `seq-${type}-p1`;
+        else if (idx === 1) sel.id = `seq-${type}-p2`;
+        else if (idx === 2) sel.id = `seq-${type}-p3`;
+        else sel.id = `seq-${type}-p${idx + 1}`;
+      }
+
+      const upBtn = item.querySelector('.btn-move-up');
+      if (upBtn) upBtn.disabled = (idx === 0);
+
+      const downBtn = item.querySelector('.btn-move-down');
+      if (downBtn) downBtn.disabled = (idx === items.length - 1);
+    });
+  }
+
+  function movePriorityStep(btn, direction) {
+    const item = btn.closest('.priority-step-item');
+    if (!item) return;
+    const container = item.parentElement;
+    const type = item.getAttribute('data-type') || (container.id.includes('bw') ? 'bw' : 'color');
+
+    if (direction === 'up') {
+      const prev = item.previousElementSibling;
+      if (prev && prev.classList.contains('priority-step-item')) {
+        container.insertBefore(item, prev);
+        reindexPrioritySteps(type);
+        updatePrioritySummaryBadge();
+        savePrinterPrioritySettings(true);
+      }
+    } else if (direction === 'down') {
+      const next = item.nextElementSibling;
+      if (next && next.classList.contains('priority-step-item')) {
+        container.insertBefore(next, item);
+        reindexPrioritySteps(type);
+        updatePrioritySummaryBadge();
+        savePrinterPrioritySettings(true);
+      }
+    }
+  }
+
+  function removePriorityStep(btn) {
+    const item = btn.closest('.priority-step-item');
+    if (!item) return;
+    const container = item.parentElement;
+    const type = item.getAttribute('data-type') || (container.id.includes('bw') ? 'bw' : 'color');
+    const items = container.querySelectorAll('.priority-step-item');
+
+    if (items.length <= 1) {
+      const sel = item.querySelector('select');
+      if (sel) sel.value = 'None';
+      updatePrioritySummaryBadge();
+      savePrinterPrioritySettings(true);
+      return;
+    }
+
+    item.remove();
+    reindexPrioritySteps(type);
+    updatePrioritySummaryBadge();
+    savePrinterPrioritySettings(true);
+    showToast(`Removed printer from ${type === 'bw' ? 'B&W' : 'Colour'} priority sequence.`, "info");
+  }
+
+  function addPriorityStep(type, selectedPrinterName = null) {
+    const container = document.getElementById(`${type === 'bw' ? 'bw' : 'color'}-priority-steps-list`);
+    if (!container) return;
+
+    const existingCount = container.querySelectorAll('.priority-step-item').length;
+    const newIdx = existingCount;
+
+    const optionsHtml = buildPrinterOptionsHtml(selectedPrinterName, false);
+    const stepId = newIdx === 0 ? `seq-${type}-p1` : (newIdx === 1 ? `seq-${type}-p2` : (newIdx === 2 ? `seq-${type}-p3` : `seq-${type}-p${newIdx + 1}`));
+
+    const stepDiv = document.createElement('div');
+    stepDiv.className = 'priority-step-item';
+    stepDiv.setAttribute('data-type', type);
+    stepDiv.setAttribute('data-index', newIdx);
+    stepDiv.innerHTML = `
+      <div class="priority-step-label">
+        <div class="flex items-center gap-2">
+          <span class="priority-step-title">${getStepTitle(newIdx)}</span>
+          <span class="${getStepBadgeClass(newIdx)}">Priority ${newIdx + 1}</span>
+        </div>
+        <div class="priority-step-actions flex items-center gap-1">
+          <button type="button" class="btn-priority-nav btn-move-up" title="Move Up in Priority" aria-label="Move Up">▲</button>
+          <button type="button" class="btn-priority-nav btn-move-down" title="Move Down in Priority" aria-label="Move Down" disabled>▼</button>
+          <button type="button" class="btn-priority-nav btn-remove-step" title="Remove Printer from Sequence" aria-label="Remove">✕</button>
+        </div>
+      </div>
+      <select class="form-select text-xs priority-select" id="${stepId}">
+        ${optionsHtml}
+      </select>
+    `;
+
+    container.appendChild(stepDiv);
+
+    const sel = stepDiv.querySelector('select');
+    const externalPrinters = (currentDetectedPrinters || []).filter(p => !p.isVirtual && p.isExternal !== false && !isDemoPrinterName(p.name));
+    const isConnected = (p) => externalPrinters.some(ep => ep.name === p);
+    if (selectedPrinterName && !isDemoPrinterName(selectedPrinterName) && isConnected(selectedPrinterName)) {
+      sel.value = selectedPrinterName;
+    } else {
+      if (externalPrinters.length > newIdx) {
+        sel.value = externalPrinters[newIdx].name;
+      } else if (externalPrinters.length > 0) {
+        sel.value = externalPrinters[0].name;
+      } else {
+        sel.value = 'None';
+      }
+    }
+
+    sel.addEventListener('change', () => {
+      updatePrioritySummaryBadge();
+      savePrinterPrioritySettings(true);
+    });
+
+    stepDiv.querySelector('.btn-move-up').addEventListener('click', (e) => movePriorityStep(e.currentTarget, 'up'));
+    stepDiv.querySelector('.btn-move-down').addEventListener('click', (e) => movePriorityStep(e.currentTarget, 'down'));
+    stepDiv.querySelector('.btn-remove-step').addEventListener('click', (e) => removePriorityStep(e.currentTarget));
+
+    reindexPrioritySteps(type);
+    updatePrioritySummaryBadge();
+    savePrinterPrioritySettings(true);
+    showToast(`Added Priority ${newIdx + 1} slot for ${type === 'bw' ? 'B&W' : 'Colour'}. Select any available printer!`, "success");
+  }
+
   function updatePrioritySummaryBadge() {
     const summaryBadge = document.getElementById('priority-rule-summary');
     if (!summaryBadge) return;
+
+    const bwContainer = document.getElementById('bw-priority-steps-list');
+    const colorContainer = document.getElementById('color-priority-steps-list');
+
+    const bwSelects = bwContainer
+      ? Array.from(bwContainer.querySelectorAll('select'))
+      : [document.getElementById('seq-bw-p1'), document.getElementById('seq-bw-p2'), document.getElementById('seq-bw-p3')].filter(Boolean);
+
+    const colSelects = colorContainer
+      ? Array.from(colorContainer.querySelectorAll('select'))
+      : [document.getElementById('seq-color-p1'), document.getElementById('seq-color-p2'), document.getElementById('seq-color-p3')].filter(Boolean);
+
+    const bwPrinters = bwSelects
+      .map(s => s?.value)
+      .filter(p => p && p !== 'None' && !p.includes('Scanning') && !p.includes('No printer') && !isDemoPrinterName(p));
+
+    const colPrinters = colSelects
+      .map(s => s?.value)
+      .filter(p => p && p !== 'None' && !p.includes('Scanning') && !p.includes('No printer') && !isDemoPrinterName(p));
+
     const bw1 = document.getElementById('seq-bw-p1')?.value;
     const bw2 = document.getElementById('seq-bw-p2')?.value;
     const col1 = document.getElementById('seq-color-p1')?.value;
     const col2 = document.getElementById('seq-color-p2')?.value;
 
-    if (!bw1 || bw1 === 'None' || bw1.includes('Scanning') || bw1.includes('No printer')) {
+    if (bwPrinters.length === 0 && colPrinters.length === 0 && (!bw1 || bw1 === 'None' || bw1.includes('Scanning') || bw1.includes('No printer') || isDemoPrinterName(bw1))) {
       summaryBadge.textContent = "No printers connected to this device";
       summaryBadge.className = "badge badge-rejected text-xs font-semibold";
       return;
     }
 
-    summaryBadge.textContent = `B&W: ${shortenPrinterName(bw1)} → ${shortenPrinterName(bw2)} | Colour: ${shortenPrinterName(col1)} → ${shortenPrinterName(col2)}`;
+    const bwChain = bwPrinters.length > 0
+      ? bwPrinters.map(shortenPrinterName).join(' → ')
+      : (bw1 && bw1 !== 'None' && !bw1.includes('Scanning') && !bw1.includes('No printer') && !isDemoPrinterName(bw1) ? shortenPrinterName(bw1) : 'None');
+    const colChain = colPrinters.length > 0
+      ? colPrinters.map(shortenPrinterName).join(' → ')
+      : (col1 && col1 !== 'None' && !col1.includes('Scanning') && !col1.includes('No printer') && !isDemoPrinterName(col1) ? shortenPrinterName(col1) : 'None');
+
+    summaryBadge.textContent = `B&W: ${bwChain} | Colour: ${colChain}`;
     summaryBadge.className = "badge badge-submitted text-xs font-semibold";
   }
 
-  function populatePrinterSequenceDropdowns(printers) {
+  function populatePrinterSequenceDropdowns(printers = null, explicitRouting = null) {
+    const bwContainer = document.getElementById('bw-priority-steps-list');
+    const colorContainer = document.getElementById('color-priority-steps-list');
     const bwP1 = document.getElementById('seq-bw-p1');
     const bwP2 = document.getElementById('seq-bw-p2');
     const bwP3 = document.getElementById('seq-bw-p3');
     const colP1 = document.getElementById('seq-color-p1');
     const colP2 = document.getElementById('seq-color-p2');
     const colP3 = document.getElementById('seq-color-p3');
-    if (!bwP1 || !colP1) return;
 
-    const currentCenter = stateStore.getCenter(centerId) || {};
-    const savedRouting = currentCenter.printerRouting || {};
+    if (!bwContainer && !bwP1) return;
 
-    // Only populate real external printers
-    const externalPrinters = (printers || []).filter(p => !p.isVirtual && p.isExternal !== false);
+    if (printers && Array.isArray(printers)) {
+      currentDetectedPrinters = printers.filter(p => !p.isVirtual && p.isExternal !== false && !isDemoPrinterName(p.name));
+    }
 
-    if (!externalPrinters || externalPrinters.length === 0) {
-      const noOption = '<option value="None">No printer connected to device</option>';
-      [bwP1, bwP2, bwP3, colP1, colP2, colP3].forEach(sel => {
-        if (sel) sel.innerHTML = noOption;
+    const activeUser = user || auth.getCurrentUser();
+    const effectiveCenterId = centerId || activeUser?.centerId;
+    const currentCenter = (effectiveCenterId ? stateStore.getCenter(effectiveCenterId) : null) || {};
+
+    let savedRouting = explicitRouting || currentCenter.printerRouting;
+    if (!savedRouting && effectiveCenterId) {
+      const rawCenterRouting = localStorage.getItem(`smartprint_routing_${effectiveCenterId}`);
+      if (rawCenterRouting) {
+        try { savedRouting = JSON.parse(rawCenterRouting); } catch (e) {}
+      }
+    }
+    if (!savedRouting && activeUser?.uid) {
+      const rawUserRouting = localStorage.getItem(`smartprint_routing_${activeUser.uid}`);
+      if (rawUserRouting) {
+        try { savedRouting = JSON.parse(rawUserRouting); } catch (e) {}
+      }
+    }
+    savedRouting = cleanPrinterRouting(savedRouting);
+
+    const externalPrinters = (currentDetectedPrinters || []).filter(p => !p.isVirtual && p.isExternal !== false && !isDemoPrinterName(p.name));
+    const isConnected = (p) => externalPrinters.some(ep => ep.name === p);
+
+    const setupList = (type, savedList) => {
+      const container = document.getElementById(`${type === 'bw' ? 'bw' : 'color'}-priority-steps-list`);
+      if (!container) return;
+
+      const cleanedSavedList = (Array.isArray(savedList) ? savedList : [])
+        .filter(p => p && p !== 'None' && !isDemoPrinterName(p) && isConnected(p));
+
+      let listToRender = [];
+      if (cleanedSavedList.length > 0) {
+        listToRender = [...cleanedSavedList];
+      } else if (externalPrinters.length > 0) {
+        listToRender = externalPrinters.slice(0, 3).map(p => p.name);
+      } else {
+        listToRender = ['None', 'None', 'None'];
+      }
+
+      while (listToRender.length < 3) {
+        listToRender.push('None');
+      }
+
+      container.innerHTML = '';
+      listToRender.forEach((printerName, idx) => {
+        const stepId = idx === 0 ? `seq-${type}-p1` : (idx === 1 ? `seq-${type}-p2` : (idx === 2 ? `seq-${type}-p3` : `seq-${type}-p${idx + 1}`));
+        const optionsHtml = buildPrinterOptionsHtml(printerName, idx === 0);
+
+        const stepDiv = document.createElement('div');
+        stepDiv.className = 'priority-step-item';
+        stepDiv.setAttribute('data-type', type);
+        stepDiv.setAttribute('data-index', idx);
+        stepDiv.innerHTML = `
+          <div class="priority-step-label">
+            <div class="flex items-center gap-2">
+              <span class="priority-step-title">${getStepTitle(idx)}</span>
+              <span class="${getStepBadgeClass(idx)}">Priority ${idx + 1}</span>
+            </div>
+            <div class="priority-step-actions flex items-center gap-1">
+              <button type="button" class="btn-priority-nav btn-move-up" title="Move Up in Priority" aria-label="Move Up" ${idx === 0 ? 'disabled' : ''}>▲</button>
+              <button type="button" class="btn-priority-nav btn-move-down" title="Move Down in Priority" aria-label="Move Down" ${idx === listToRender.length - 1 ? 'disabled' : ''}>▼</button>
+              <button type="button" class="btn-priority-nav btn-remove-step" title="Remove Printer from Sequence" aria-label="Remove">✕</button>
+            </div>
+          </div>
+          <select class="form-select text-xs priority-select" id="${stepId}">
+            ${optionsHtml}
+          </select>
+        `;
+
+        container.appendChild(stepDiv);
+
+        const sel = stepDiv.querySelector('select');
+        if (printerName && !isDemoPrinterName(printerName) && isConnected(printerName)) {
+          sel.value = printerName;
+        } else {
+          sel.value = 'None';
+        }
+
+        sel.addEventListener('change', () => {
+          updatePrioritySummaryBadge();
+          savePrinterPrioritySettings(true);
+        });
+
+        stepDiv.querySelector('.btn-move-up').addEventListener('click', (e) => movePriorityStep(e.currentTarget, 'up'));
+        stepDiv.querySelector('.btn-move-down').addEventListener('click', (e) => movePriorityStep(e.currentTarget, 'down'));
+        stepDiv.querySelector('.btn-remove-step').addEventListener('click', (e) => removePriorityStep(e.currentTarget));
       });
-      updatePrioritySummaryBadge();
-      return;
-    }
 
-    const optionsHtml = externalPrinters.map(p => `<option value="${escapeHtml(p.name)}">${escapeHtml(p.name)} (${escapeHtml(p.port)})</option>`).join('');
-    const optionsWithNoneHtml = optionsHtml + '<option value="None">None (Do Not Failover)</option>';
+      reindexPrioritySteps(type);
+    };
 
-    [bwP1, colP1].forEach(sel => { if (sel) sel.innerHTML = optionsHtml; });
-    [bwP2, bwP3, colP2, colP3].forEach(sel => { if (sel) sel.innerHTML = optionsWithNoneHtml; });
-
-    // Restore saved selections or default to the real detected devices
-    if (savedRouting.bwPriority?.[0] && externalPrinters.some(p => p.name === savedRouting.bwPriority[0])) {
-      bwP1.value = savedRouting.bwPriority[0];
+    if (bwContainer && colorContainer) {
+      setupList('bw', savedRouting.bwPriority);
+      setupList('color', savedRouting.colorPriority);
     } else {
-      bwP1.value = externalPrinters[0].name;
-    }
+      // Legacy fallback
+      const bw1Val = isConnected(savedRouting.bwPriority?.[0]) ? savedRouting.bwPriority[0] : (externalPrinters[0]?.name || 'None');
+      const bw2Val = isConnected(savedRouting.bwPriority?.[1]) ? savedRouting.bwPriority[1] : (externalPrinters[1]?.name || 'None');
+      const bw3Val = isConnected(savedRouting.bwPriority?.[2]) ? savedRouting.bwPriority[2] : 'None';
+      const col1Val = isConnected(savedRouting.colorPriority?.[0]) ? savedRouting.colorPriority[0] : (externalPrinters[0]?.name || 'None');
+      const col2Val = isConnected(savedRouting.colorPriority?.[1]) ? savedRouting.colorPriority[1] : (externalPrinters[1]?.name || 'None');
+      const col3Val = isConnected(savedRouting.colorPriority?.[2]) ? savedRouting.colorPriority[2] : 'None';
 
-    if (savedRouting.bwPriority?.[1] && externalPrinters.some(p => p.name === savedRouting.bwPriority[1])) {
-      if (bwP2) bwP2.value = savedRouting.bwPriority[1];
-    } else if (bwP2) {
-      bwP2.value = externalPrinters.length > 1 ? externalPrinters[1].name : "None";
-    }
+      if (bwP1) bwP1.innerHTML = buildPrinterOptionsHtml(bw1Val, true);
+      if (bwP2) bwP2.innerHTML = buildPrinterOptionsHtml(bw2Val, false);
+      if (bwP3) bwP3.innerHTML = buildPrinterOptionsHtml(bw3Val, false);
+      if (colP1) colP1.innerHTML = buildPrinterOptionsHtml(col1Val, true);
+      if (colP2) colP2.innerHTML = buildPrinterOptionsHtml(col2Val, false);
+      if (colP3) colP3.innerHTML = buildPrinterOptionsHtml(col3Val, false);
 
-    if (savedRouting.bwPriority?.[2] && externalPrinters.some(p => p.name === savedRouting.bwPriority[2])) {
-      if (bwP3) bwP3.value = savedRouting.bwPriority[2];
-    } else if (bwP3) {
-      bwP3.value = "None";
-    }
-
-    if (savedRouting.colorPriority?.[0] && externalPrinters.some(p => p.name === savedRouting.colorPriority[0])) {
-      colP1.value = savedRouting.colorPriority[0];
-    } else {
-      colP1.value = externalPrinters[0].name;
-    }
-
-    if (savedRouting.colorPriority?.[1] && externalPrinters.some(p => p.name === savedRouting.colorPriority[1])) {
-      if (colP2) colP2.value = savedRouting.colorPriority[1];
-    } else if (colP2) {
-      colP2.value = externalPrinters.length > 1 ? externalPrinters[1].name : "None";
-    }
-
-    if (savedRouting.colorPriority?.[2] && externalPrinters.some(p => p.name === savedRouting.colorPriority[2])) {
-      if (colP3) colP3.value = savedRouting.colorPriority[2];
-    } else if (colP3) {
-      colP3.value = "None";
+      if (bwP1) bwP1.value = bw1Val;
+      if (bwP2) bwP2.value = bw2Val;
+      if (bwP3) bwP3.value = bw3Val;
+      if (colP1) colP1.value = col1Val;
+      if (colP2) colP2.value = col2Val;
+      if (colP3) colP3.value = col3Val;
     }
 
     if (typeof savedRouting.autoFailover === 'boolean') {
@@ -1280,14 +1823,29 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch('/api/system/printers');
       const data = await res.json();
       currentDetectedPrinters = (data && data.printers)
-        ? data.printers.filter(p => !p.isVirtual && p.isExternal !== false)
+        ? data.printers.filter(p => !p.isVirtual && p.isExternal !== false && !isDemoPrinterName(p.name))
         : [];
     } catch (err) {
       currentDetectedPrinters = [];
     }
 
     renderConnectedPrinters(currentDetectedPrinters);
-    populatePrinterSequenceDropdowns(currentDetectedPrinters);
+
+    const activeUser = user || auth.getCurrentUser();
+    const effectiveCenterId = centerId || activeUser?.centerId;
+    const currentCenter = (effectiveCenterId ? stateStore.getCenter(effectiveCenterId) : null) || {};
+    let savedRouting = currentCenter.printerRouting;
+    if (!savedRouting && effectiveCenterId) {
+      const r = localStorage.getItem(`smartprint_routing_${effectiveCenterId}`);
+      if (r) { try { savedRouting = JSON.parse(r); } catch(e) {} }
+    }
+    if (!savedRouting && activeUser?.uid) {
+      const r = localStorage.getItem(`smartprint_routing_${activeUser.uid}`);
+      if (r) { try { savedRouting = JSON.parse(r); } catch(e) {} }
+    }
+    savedRouting = cleanPrinterRouting(savedRouting);
+
+    populatePrinterSequenceDropdowns(currentDetectedPrinters, savedRouting);
 
     if (countBadge) {
       countBadge.textContent = `${currentDetectedPrinters.length} External Connected`;
@@ -1335,6 +1893,20 @@ document.addEventListener('DOMContentLoaded', () => {
   // Settings: 3. Printer Sequence Priority (B&W & Colour)
   // -------------------------------------------------------------
   async function savePrinterPrioritySettings(showNotification = true) {
+    const activeUser = user || auth.getCurrentUser();
+    const effectiveCenterId = centerId || activeUser?.centerId;
+
+    const bwContainer = document.getElementById('bw-priority-steps-list');
+    const colorContainer = document.getElementById('color-priority-steps-list');
+
+    const bwSelects = bwContainer
+      ? Array.from(bwContainer.querySelectorAll('select'))
+      : [document.getElementById('seq-bw-p1'), document.getElementById('seq-bw-p2'), document.getElementById('seq-bw-p3')].filter(Boolean);
+
+    const colSelects = colorContainer
+      ? Array.from(colorContainer.querySelectorAll('select'))
+      : [document.getElementById('seq-color-p1'), document.getElementById('seq-color-p2'), document.getElementById('seq-color-p3')].filter(Boolean);
+
     const bw1 = document.getElementById('seq-bw-p1')?.value;
     const bw2 = document.getElementById('seq-bw-p2')?.value;
     const bw3 = document.getElementById('seq-bw-p3')?.value;
@@ -1344,24 +1916,38 @@ document.addEventListener('DOMContentLoaded', () => {
     const autoFailover = document.getElementById('seq-auto-failover')?.checked ?? true;
     const autoDuplexMatch = document.getElementById('seq-auto-duplex-match')?.checked ?? true;
 
-    const printerRouting = {
-      bwPriority: [bw1, bw2, bw3].filter(p => p && p !== 'None' && !p.includes('No printer') && !p.includes('Scanning')),
-      colorPriority: [col1, col2, col3].filter(p => p && p !== 'None' && !p.includes('No printer') && !p.includes('Scanning')),
+    const bwPriority = (bwSelects.length > 0 ? bwSelects.map(s => s.value) : [bw1, bw2, bw3])
+      .filter(p => p && p !== 'None' && !p.includes('No printer') && !p.includes('Scanning') && !isDemoPrinterName(p));
+
+    const colorPriority = (colSelects.length > 0 ? colSelects.map(s => s.value) : [col1, col2, col3])
+      .filter(p => p && p !== 'None' && !p.includes('No printer') && !p.includes('Scanning') && !isDemoPrinterName(p));
+
+    const printerRouting = cleanPrinterRouting({
+      bwPriority,
+      colorPriority,
       autoFailover,
       autoDuplexMatch,
       updatedAt: new Date().toISOString()
-    };
+    });
 
-    const currentCenter = stateStore.getCenter(centerId) || {};
+    const currentCenter = (effectiveCenterId ? stateStore.getCenter(effectiveCenterId) : null) || {};
     stateStore.saveCenter({
       ...currentCenter,
-      centerId,
+      centerId: effectiveCenterId,
+      ownerUid: activeUser?.uid,
       printerRouting
     });
 
-    if (centerId && db) {
+    if (effectiveCenterId) {
+      localStorage.setItem(`smartprint_routing_${effectiveCenterId}`, JSON.stringify(printerRouting));
+    }
+    if (activeUser?.uid) {
+      localStorage.setItem(`smartprint_routing_${activeUser.uid}`, JSON.stringify(printerRouting));
+    }
+
+    if (effectiveCenterId && db) {
       try {
-        const centerRef = doc(db, 'centers', centerId);
+        const centerRef = doc(db, 'centers', effectiveCenterId);
         await setDoc(centerRef, { printerRouting, updatedAt: serverTimestamp() }, { merge: true });
       } catch (err) {
         console.warn("Could not save printerRouting to Firestore directly:", err);
@@ -1384,6 +1970,25 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
   });
+
+  // Explicit Save & Update Button for Printer Priority
+  const btnSavePrinterPriority = document.getElementById('btn-save-printer-priority');
+  if (btnSavePrinterPriority) {
+    btnSavePrinterPriority.addEventListener('click', async (e) => {
+      e.preventDefault();
+      await savePrinterPrioritySettings(true);
+    });
+  }
+
+  // Add Printer buttons for B&W and Colour priority sequences
+  const addBwBtn = document.getElementById('btn-add-bw-printer');
+  if (addBwBtn) {
+    addBwBtn.addEventListener('click', () => addPriorityStep('bw'));
+  }
+  const addColorBtn = document.getElementById('btn-add-color-printer');
+  if (addColorBtn) {
+    addColorBtn.addEventListener('click', () => addPriorityStep('color'));
+  }
 
   const printerPriorityForm = document.getElementById('printer-priority-form');
   if (printerPriorityForm) {
@@ -1443,32 +2048,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Small Dark / Light Theme Toggle Button Handler
-  const themeToggleBtn = document.getElementById('theme-toggle-btn');
-  const themeIconSun = document.getElementById('theme-icon-sun');
-  const themeIconMoon = document.getElementById('theme-icon-moon');
-
-  const applyTheme = (theme) => {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('smartprint_theme', theme);
-    if (theme === 'dark') {
-      if (themeIconSun) themeIconSun.style.display = 'inline-flex';
-      if (themeIconMoon) themeIconMoon.style.display = 'none';
-      if (themeToggleBtn) themeToggleBtn.setAttribute('title', 'Switch to Light Theme');
-    } else {
-      if (themeIconSun) themeIconSun.style.display = 'none';
-      if (themeIconMoon) themeIconMoon.style.display = 'inline-flex';
-      if (themeToggleBtn) themeToggleBtn.setAttribute('title', 'Switch to Dark Theme');
-    }
-  };
-
-  const initialTheme = localStorage.getItem('smartprint_theme') || 'light';
-  applyTheme(initialTheme);
-
-  themeToggleBtn?.addEventListener('click', () => {
-    const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
-    const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
-    applyTheme(nextTheme);
-  });
+  initThemeToggle();
 
   // Subscribe to reactive state updates
   stateStore.subscribe((event) => {
@@ -2041,24 +2621,51 @@ function populateProfileForm(center, maybeUser = null) {
     customerLinkEl.textContent = `Open Link (${publicId}) \u2192`;
   }
 
-  const rates = c.rates || {};
-  setVal('rate-bw-single', rates.bwSingle || 2.0);
-  setVal('rate-bw-double', rates.bwDouble || 3.5);
-  setVal('rate-color-single', rates.colorSingle || 10.0);
-  setVal('rate-color-double', rates.colorDouble || 18.0);
+  let rates = c.rates;
+  if (!rates && c.centerId) {
+    try {
+      const r = localStorage.getItem(`smartprint_rates_${c.centerId}`);
+      if (r) rates = JSON.parse(r);
+    } catch (e) {}
+  }
+  if (!rates && user?.uid) {
+    try {
+      const r = localStorage.getItem(`smartprint_rates_${user.uid}`);
+      if (r) rates = JSON.parse(r);
+    } catch (e) {}
+  }
+  if (!rates) rates = {};
+
+  setVal('rate-bw-single', rates.bwSingle !== undefined ? rates.bwSingle : 2.0);
+  setVal('rate-bw-double', rates.bwDouble !== undefined ? rates.bwDouble : 3.5);
+  setVal('rate-color-single', rates.colorSingle !== undefined ? rates.colorSingle : 10.0);
+  setVal('rate-color-double', rates.colorDouble !== undefined ? rates.colorDouble : 18.0);
 
   // Restore Printer Routing Priority if saved
-  if (c.printerRouting) {
-    const pr = c.printerRouting;
+  let pr = c.printerRouting ? cleanPrinterRouting(c.printerRouting) : null;
+  if (!pr && c.centerId) {
+    try {
+      const r = localStorage.getItem(`smartprint_routing_${c.centerId}`);
+      if (r) pr = cleanPrinterRouting(JSON.parse(r));
+    } catch (e) {}
+  }
+  if (!pr && user?.uid) {
+    try {
+      const r = localStorage.getItem(`smartprint_routing_${user.uid}`);
+      if (r) pr = cleanPrinterRouting(JSON.parse(r));
+    } catch (e) {}
+  }
+  if (pr) {
+    pr = cleanPrinterRouting(pr);
     if (pr.bwPriority) {
-      if (pr.bwPriority[0]) setVal('seq-bw-p1', pr.bwPriority[0]);
-      if (pr.bwPriority[1]) setVal('seq-bw-p2', pr.bwPriority[1]);
-      if (pr.bwPriority[2]) setVal('seq-bw-p3', pr.bwPriority[2]);
+      if (pr.bwPriority[0] && !isDemoPrinterName(pr.bwPriority[0])) setVal('seq-bw-p1', pr.bwPriority[0]);
+      if (pr.bwPriority[1] && !isDemoPrinterName(pr.bwPriority[1])) setVal('seq-bw-p2', pr.bwPriority[1]);
+      if (pr.bwPriority[2] && !isDemoPrinterName(pr.bwPriority[2])) setVal('seq-bw-p3', pr.bwPriority[2]);
     }
     if (pr.colorPriority) {
-      if (pr.colorPriority[0]) setVal('seq-color-p1', pr.colorPriority[0]);
-      if (pr.colorPriority[1]) setVal('seq-color-p2', pr.colorPriority[1]);
-      if (pr.colorPriority[2]) setVal('seq-color-p3', pr.colorPriority[2]);
+      if (pr.colorPriority[0] && !isDemoPrinterName(pr.colorPriority[0])) setVal('seq-color-p1', pr.colorPriority[0]);
+      if (pr.colorPriority[1] && !isDemoPrinterName(pr.colorPriority[1])) setVal('seq-color-p2', pr.colorPriority[1]);
+      if (pr.colorPriority[2] && !isDemoPrinterName(pr.colorPriority[2])) setVal('seq-color-p3', pr.colorPriority[2]);
     }
     if (typeof pr.autoFailover === 'boolean') {
       const failoverCheck = document.getElementById('seq-auto-failover');
@@ -2068,14 +2675,8 @@ function populateProfileForm(center, maybeUser = null) {
       const duplexCheck = document.getElementById('seq-auto-duplex-match');
       if (duplexCheck) duplexCheck.checked = pr.autoDuplexMatch;
     }
-    const summaryBadge = document.getElementById('priority-rule-summary');
-    if (summaryBadge && pr.bwPriority && pr.colorPriority) {
-      const shorten = (name) => {
-        if (!name || name === 'None') return 'None';
-        if (name.length > 18) return name.substring(0, 16) + '..';
-        return name;
-      };
-      summaryBadge.textContent = `B&W: ${shorten(pr.bwPriority[0])} → ${shorten(pr.bwPriority[1])} | Colour: ${shorten(pr.colorPriority[0])} → ${shorten(pr.colorPriority[1])}`;
+    if (typeof updatePrioritySummaryBadge === 'function') {
+      try { updatePrioritySummaryBadge(); } catch (e) {}
     }
   }
 
@@ -2163,7 +2764,7 @@ function attachActionListeners() {
         // Check if printer is available: connected, online, and not currently printing another job
         const allJobs = stateStore.getJobs(centerId);
         const isPrinterAvailable = (pName) => {
-          if (!pName || pName === 'None' || pName.includes('No printer') || pName.includes('Scanning')) return false;
+          if (!pName || pName === 'None' || pName.includes('No printer') || pName.includes('Scanning') || isDemoPrinterName(pName)) return false;
           if (currentDetectedPrinters && currentDetectedPrinters.length > 0) {
             const dev = currentDetectedPrinters.find(d => d.name === pName);
             if (!dev || dev.isOffline || dev.status === 'Offline') return false;
@@ -2194,9 +2795,24 @@ function attachActionListeners() {
           priorityLevel = 3;
           isFailover = true;
           failoverMsg = `Priority 1 & 2 unavailable. Auto-failing over to Priority 3: ${p3}...`;
-        } else {
+        } else if (autoFailover && priorityList && priorityList.length > 3) {
+          // Check beyond Priority 3 for multiple printers
+          for (let pIdx = 3; pIdx < priorityList.length; pIdx++) {
+            const pCandidate = priorityList[pIdx];
+            if (pCandidate && pCandidate !== 'None' && isPrinterAvailable(pCandidate)) {
+              targetPrinter = pCandidate;
+              priorityLevel = pIdx + 1;
+              isFailover = true;
+              failoverMsg = `Higher priority printers unavailable. Auto-failing over to Priority ${priorityLevel}: ${pCandidate}...`;
+              break;
+            }
+          }
+        }
+
+        if (!targetPrinter || isDemoPrinterName(targetPrinter)) {
           // Fallback if none in priority sequence available
-          targetPrinter = p1 || (currentDetectedPrinters?.[0]?.name) || (isColor ? 'Epson EcoTank L3250 Series' : 'HP LaserJet Pro M404dn');
+          const validDetected = (currentDetectedPrinters || []).filter(p => !isDemoPrinterName(p.name));
+          targetPrinter = (!isDemoPrinterName(p1) ? p1 : null) || (validDetected[0]?.name) || (isColor ? 'Connected Color Printer' : 'Connected B&W Printer');
           priorityLevel = 1;
           isFailover = false;
         }

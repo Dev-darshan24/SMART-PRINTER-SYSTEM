@@ -126,12 +126,12 @@
           <!-- Small Dark / Light Theme Toggle Button -->
           <button type="button" class="theme-toggle-btn" id="theme-toggle-btn" aria-label="Toggle Dark / Light Theme" title="Toggle Dark/Light Theme">
             <span id="theme-icon-moon">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" transform="matrix(-1 0 0 1 24 0)"></path>
               </svg>
             </span>
             <span id="theme-icon-sun" style="display: none;">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="5"></circle>
                 <line x1="12" y1="1" x2="12" y2="3"></line>
                 <line x1="12" y1="21" x2="12" y2="23"></line>
@@ -144,11 +144,6 @@
               </svg>
             </span>
           </button>
-
-          <a href="#" target="_blank" class="btn btn-secondary btn-sm" id="topbar-customer-link" style="display: none;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-            Open Customer Page
-          </a>
         </div>
       </header>
 
@@ -272,38 +267,66 @@
                       <span class="badge text-xs" style="background: var(--bg-surface-subtle); color: var(--text-muted);">Monochrome</span>
                     </div>
 
-                    <!-- Priority 1 B&W -->
-                    <div class="priority-step-item">
-                      <div class="priority-step-label">
-                        <span>1st Choice (Primary)</span>
-                        <span class="priority-badge-pill priority-badge-p1">Priority 1</span>
+                    <div class="priority-steps-list" id="bw-priority-steps-list">
+                      <!-- Priority 1 B&W -->
+                      <div class="priority-step-item" data-type="bw">
+                        <div class="priority-step-label">
+                          <div class="flex items-center gap-2">
+                            <span class="priority-step-title">1st Choice (Primary)</span>
+                            <span class="priority-badge-pill priority-badge-p1">Priority 1</span>
+                          </div>
+                          <div class="priority-step-actions flex items-center gap-1">
+                            <button type="button" class="btn-priority-nav btn-move-up" title="Move Up in Priority" aria-label="Move Up" disabled>▲</button>
+                            <button type="button" class="btn-priority-nav btn-move-down" title="Move Down in Priority" aria-label="Move Down">▼</button>
+                            <button type="button" class="btn-priority-nav btn-remove-step" title="Remove Printer from Sequence" aria-label="Remove">✕</button>
+                          </div>
+                        </div>
+                        <select class="form-select text-xs priority-select" id="seq-bw-p1" required>
+                          <option value="None">Scanning connected devices...</option>
+                        </select>
                       </div>
-                      <select class="form-select text-xs" id="seq-bw-p1" required>
-                        <option value="None">Scanning connected devices...</option>
-                      </select>
+
+                      <!-- Priority 2 B&W -->
+                      <div class="priority-step-item" data-type="bw">
+                        <div class="priority-step-label">
+                          <div class="flex items-center gap-2">
+                            <span class="priority-step-title">2nd Choice (Failover / Large Batches)</span>
+                            <span class="priority-badge-pill priority-badge-p2">Priority 2</span>
+                          </div>
+                          <div class="priority-step-actions flex items-center gap-1">
+                            <button type="button" class="btn-priority-nav btn-move-up" title="Move Up in Priority" aria-label="Move Up">▲</button>
+                            <button type="button" class="btn-priority-nav btn-move-down" title="Move Down in Priority" aria-label="Move Down">▼</button>
+                            <button type="button" class="btn-priority-nav btn-remove-step" title="Remove Printer from Sequence" aria-label="Remove">✕</button>
+                          </div>
+                        </div>
+                        <select class="form-select text-xs priority-select" id="seq-bw-p2">
+                          <option value="None">None (Do Not Failover)</option>
+                        </select>
+                      </div>
+
+                      <!-- Priority 3 B&W -->
+                      <div class="priority-step-item" data-type="bw">
+                        <div class="priority-step-label">
+                          <div class="flex items-center gap-2">
+                            <span class="priority-step-title">3rd Choice (Backup)</span>
+                            <span class="priority-badge-pill priority-badge-p3">Priority 3</span>
+                          </div>
+                          <div class="priority-step-actions flex items-center gap-1">
+                            <button type="button" class="btn-priority-nav btn-move-up" title="Move Up in Priority" aria-label="Move Up">▲</button>
+                            <button type="button" class="btn-priority-nav btn-move-down" title="Move Down in Priority" aria-label="Move Down" disabled>▼</button>
+                            <button type="button" class="btn-priority-nav btn-remove-step" title="Remove Printer from Sequence" aria-label="Remove">✕</button>
+                          </div>
+                        </div>
+                        <select class="form-select text-xs priority-select" id="seq-bw-p3">
+                          <option value="None">None (No 3rd Backup)</option>
+                        </select>
+                      </div>
                     </div>
 
-                    <!-- Priority 2 B&W -->
-                    <div class="priority-step-item">
-                      <div class="priority-step-label">
-                        <span>2nd Choice (Failover / Large Batches)</span>
-                        <span class="priority-badge-pill priority-badge-p2">Priority 2</span>
-                      </div>
-                      <select class="form-select text-xs" id="seq-bw-p2">
-                        <option value="None">None (Do Not Failover)</option>
-                      </select>
-                    </div>
-
-                    <!-- Priority 3 B&W -->
-                    <div class="priority-step-item">
-                      <div class="priority-step-label">
-                        <span>3rd Choice (Backup)</span>
-                        <span class="priority-badge-pill priority-badge-p3">Priority 3</span>
-                      </div>
-                      <select class="form-select text-xs" id="seq-bw-p3">
-                        <option value="None">None (No 3rd Backup)</option>
-                      </select>
-                    </div>
+                    <button type="button" class="btn-add-printer-seq" id="btn-add-bw-printer">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                      Add Printer to B&amp;W Priority
+                    </button>
                   </div>
 
                   <!-- Column 2: Colour Print Priority Sequence -->
@@ -318,38 +341,66 @@
                       <span class="badge text-xs" style="background: rgba(124, 58, 237, 0.12); color: var(--primary-700);">Full Colour</span>
                     </div>
 
-                    <!-- Priority 1 Colour -->
-                    <div class="priority-step-item">
-                      <div class="priority-step-label">
-                        <span>1st Choice (Primary)</span>
-                        <span class="priority-badge-pill priority-badge-p1">Priority 1</span>
+                    <div class="priority-steps-list" id="color-priority-steps-list">
+                      <!-- Priority 1 Colour -->
+                      <div class="priority-step-item" data-type="color">
+                        <div class="priority-step-label">
+                          <div class="flex items-center gap-2">
+                            <span class="priority-step-title">1st Choice (Primary)</span>
+                            <span class="priority-badge-pill priority-badge-p1">Priority 1</span>
+                          </div>
+                          <div class="priority-step-actions flex items-center gap-1">
+                            <button type="button" class="btn-priority-nav btn-move-up" title="Move Up in Priority" aria-label="Move Up" disabled>▲</button>
+                            <button type="button" class="btn-priority-nav btn-move-down" title="Move Down in Priority" aria-label="Move Down">▼</button>
+                            <button type="button" class="btn-priority-nav btn-remove-step" title="Remove Printer from Sequence" aria-label="Remove">✕</button>
+                          </div>
+                        </div>
+                        <select class="form-select text-xs priority-select" id="seq-color-p1" required>
+                          <option value="None">Scanning connected devices...</option>
+                        </select>
                       </div>
-                      <select class="form-select text-xs" id="seq-color-p1" required>
-                        <option value="None">Scanning connected devices...</option>
-                      </select>
+
+                      <!-- Priority 2 Colour -->
+                      <div class="priority-step-item" data-type="color">
+                        <div class="priority-step-label">
+                          <div class="flex items-center gap-2">
+                            <span class="priority-step-title">2nd Choice (Failover / Laser Color)</span>
+                            <span class="priority-badge-pill priority-badge-p2">Priority 2</span>
+                          </div>
+                          <div class="priority-step-actions flex items-center gap-1">
+                            <button type="button" class="btn-priority-nav btn-move-up" title="Move Up in Priority" aria-label="Move Up">▲</button>
+                            <button type="button" class="btn-priority-nav btn-move-down" title="Move Down in Priority" aria-label="Move Down">▼</button>
+                            <button type="button" class="btn-priority-nav btn-remove-step" title="Remove Printer from Sequence" aria-label="Remove">✕</button>
+                          </div>
+                        </div>
+                        <select class="form-select text-xs priority-select" id="seq-color-p2">
+                          <option value="None">None (Do Not Failover)</option>
+                        </select>
+                      </div>
+
+                      <!-- Priority 3 Colour -->
+                      <div class="priority-step-item" data-type="color">
+                        <div class="priority-step-label">
+                          <div class="flex items-center gap-2">
+                            <span class="priority-step-title">3rd Choice (Backup)</span>
+                            <span class="priority-badge-pill priority-badge-p3">Priority 3</span>
+                          </div>
+                          <div class="priority-step-actions flex items-center gap-1">
+                            <button type="button" class="btn-priority-nav btn-move-up" title="Move Up in Priority" aria-label="Move Up">▲</button>
+                            <button type="button" class="btn-priority-nav btn-move-down" title="Move Down in Priority" aria-label="Move Down" disabled>▼</button>
+                            <button type="button" class="btn-priority-nav btn-remove-step" title="Remove Printer from Sequence" aria-label="Remove">✕</button>
+                          </div>
+                        </div>
+                        <select class="form-select text-xs priority-select" id="seq-color-p3">
+                          <option value="None">None (No 3rd Color Unit)</option>
+                        </select>
+                      </div>
                     </div>
 
-                    <!-- Priority 2 Colour -->
-                    <div class="priority-step-item">
-                      <div class="priority-step-label">
-                        <span>2nd Choice (Failover / Laser Color)</span>
-                        <span class="priority-badge-pill priority-badge-p2">Priority 2</span>
-                      </div>
-                      <select class="form-select text-xs" id="seq-color-p2">
-                        <option value="None">None (Do Not Failover)</option>
-                      </select>
-                    </div>
-
-                    <!-- Priority 3 Colour -->
-                    <div class="priority-step-item">
-                      <div class="priority-step-label">
-                        <span>3rd Choice (Backup)</span>
-                        <span class="priority-badge-pill priority-badge-p3">Priority 3</span>
-                      </div>
-                      <select class="form-select text-xs" id="seq-color-p3">
-                        <option value="None">None (No 3rd Color Unit)</option>
-                      </select>
-                    </div>
+                    <button type="button" class="btn-add-printer-seq" id="btn-add-color-printer">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                      Add Printer to Colour Priority
+                    </button>
                   </div>
                 </div>
 

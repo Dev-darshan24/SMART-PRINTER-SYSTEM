@@ -126,6 +126,11 @@ describe("SmartPrint — Settings & Hardware Configuration Verification", () => 
     assert.strictEqual(js.includes("bwPriority"), true, "app.js must store bwPriority list.");
     assert.strictEqual(js.includes("colorPriority"), true, "app.js must store colorPriority list.");
     assert.strictEqual(js.includes("Routing to Priority 1 Printer:"), true, "Print jobs must route to owner's Priority 1 printer.");
+
+    // Strict hardware-only connection assertions:
+    assert.strictEqual(js.includes("(Saved Device)"), false, "app.js must NOT inject phantom (Saved Device) options when hardware is disconnected.");
+    assert.strictEqual(js.includes("isSelectedConnected"), true, "buildPrinterOptionsHtml must verify device is connected.");
+    assert.strictEqual(js.includes("No printer connected to device"), true, "Dropdown must display 'No printer connected to device' when disconnected.");
   });
 
   it("verifies dashboard.css defines styling for printer cards, status dots, and sequence grid", () => {
@@ -180,5 +185,87 @@ describe("SmartPrint — Settings & Hardware Configuration Verification", () => 
     assert.strictEqual(js.includes("getPrinterSvgForType"), true, "app.js must define getPrinterSvgForType.");
     assert.strictEqual(js.includes("!p.isVirtual"), true, "app.js must exclude virtual printers.");
   });
+
+  it("verifies multi-printer priority sequence configuration, dynamic add buttons, priority reordering, and failover beyond 3 printers", () => {
+    const settingsHtml = fs.readFileSync(settingsHtmlPath, "utf-8");
+    const indexHtml = fs.readFileSync(indexHtmlPath, "utf-8");
+    const js = fs.readFileSync(appJsPath, "utf-8");
+    const css = fs.readFileSync(cssPath, "utf-8");
+
+    [settingsHtml, indexHtml].forEach((html, idx) => {
+      const fileLabel = idx === 0 ? "settings.html" : "index.html";
+      assert.strictEqual(html.includes('id="bw-priority-steps-list"'), true, `${fileLabel} must contain #bw-priority-steps-list.`);
+      assert.strictEqual(html.includes('id="color-priority-steps-list"'), true, `${fileLabel} must contain #color-priority-steps-list.`);
+      assert.strictEqual(html.includes('id="btn-add-bw-printer"'), true, `${fileLabel} must contain #btn-add-bw-printer.`);
+      assert.strictEqual(html.includes('id="btn-add-color-printer"'), true, `${fileLabel} must contain #btn-add-color-printer.`);
+      assert.strictEqual(html.includes("btn-move-up"), true, `${fileLabel} must contain .btn-move-up buttons.`);
+      assert.strictEqual(html.includes("btn-move-down"), true, `${fileLabel} must contain .btn-move-down buttons.`);
+      assert.strictEqual(html.includes("btn-remove-step"), true, `${fileLabel} must contain .btn-remove-step buttons.`);
+    });
+
+    // Check CSS
+    assert.strictEqual(css.includes(".priority-steps-list"), true, "dashboard.css must style .priority-steps-list.");
+    assert.strictEqual(css.includes(".btn-priority-nav"), true, "dashboard.css must style .btn-priority-nav.");
+    assert.strictEqual(css.includes(".btn-add-printer-seq"), true, "dashboard.css must style .btn-add-printer-seq.");
+
+    // Check JS functions for multi-printer and re-ordering
+    assert.strictEqual(js.includes("addPriorityStep"), true, "app.js must define addPriorityStep.");
+    assert.strictEqual(js.includes("movePriorityStep"), true, "app.js must define movePriorityStep.");
+    assert.strictEqual(js.includes("removePriorityStep"), true, "app.js must define removePriorityStep.");
+    assert.strictEqual(js.includes("reindexPrioritySteps"), true, "app.js must define reindexPrioritySteps.");
+    assert.strictEqual(js.includes("btn-add-bw-printer"), true, "app.js must wire up btn-add-bw-printer.");
+    assert.strictEqual(js.includes("btn-add-color-printer"), true, "app.js must wire up btn-add-color-printer.");
+  });
+
+  it("verifies settings persist per-user across page refreshes and options are preserved without defaulting", () => {
+    const js = fs.readFileSync(appJsPath, "utf-8");
+
+    assert.strictEqual(js.includes("restoreUserSettings"), true, "app.js must define restoreUserSettings.");
+    assert.strictEqual(js.includes("buildPrinterOptionsHtml"), true, "app.js must define buildPrinterOptionsHtml.");
+    assert.strictEqual(js.includes("smartprint_rates_"), true, "app.js must isolate rates in localStorage per user/center.");
+    assert.strictEqual(js.includes("smartprint_routing_"), true, "app.js must isolate routing in localStorage per user/center.");
+    assert.strictEqual(js.includes("STORE_HARDWARE_PRESETS"), true, "app.js must include store hardware presets for printer selection.");
+  });
+
+  it("verifies all demo data is removed from printer sequence and filtered from state, storage, and UI", () => {
+    const js = fs.readFileSync(appJsPath, "utf-8");
+    const stateJs = fs.readFileSync(path.resolve(__dirname, "../public/assets/js/state.js"), "utf-8");
+    const settingsHtml = fs.readFileSync(settingsHtmlPath, "utf-8");
+    const indexHtml = fs.readFileSync(indexHtmlPath, "utf-8");
+
+    // 1. Both app.js and state.js define demo printer filter and clean routing utilities
+    assert.strictEqual(js.includes("DEMO_PRINTER_NAMES"), true, "app.js must define DEMO_PRINTER_NAMES.");
+    assert.strictEqual(js.includes("isDemoPrinterName"), true, "app.js must define isDemoPrinterName helper.");
+    assert.strictEqual(js.includes("cleanPrinterRouting"), true, "app.js must define cleanPrinterRouting helper.");
+    assert.strictEqual(stateJs.includes("DEMO_PRINTER_NAMES"), true, "state.js must define DEMO_PRINTER_NAMES.");
+    assert.strictEqual(stateJs.includes("cleanPrinterRouting"), true, "state.js must define cleanPrinterRouting helper.");
+
+    // 2. Demo printers must not be injected in printer options HTML
+    assert.strictEqual(js.includes("!isDemoPrinterName(selectedPrinterName)"), true, "buildPrinterOptionsHtml must reject demo printer names.");
+
+    // 3. Neither settings.html nor index.html contains any demo printer options in printer sequence card
+    const demoPrinters = [
+      "HP LaserJet Pro M404dn",
+      "Epson EcoTank L3250 Series",
+      "Canon imageRUNNER 2525",
+      "Brother MFC-L8690CDW",
+      "Ricoh Aficio MP 2014",
+      "Konica Minolta bizhub 225i",
+      "TVS MSP 240 Star"
+    ];
+
+    [settingsHtml, indexHtml].forEach((html, idx) => {
+      const fileLabel = idx === 0 ? "settings.html" : "index.html";
+      const seqSection = html.split('id="card-printer-sequence"')[1]?.split('</form>')[0] || "";
+      demoPrinters.forEach(dp => {
+        assert.strictEqual(seqSection.includes(dp), false, `${fileLabel} sequence priority card must NOT contain demo printer ${dp}.`);
+      });
+    });
+
+    // 4. In app.js, priority sequences filter out demo names on save and restore
+    assert.strictEqual(js.includes("!isDemoPrinterName(p)"), true, "savePrinterPrioritySettings must filter out demo printer names.");
+  });
 });
+
+
 
