@@ -34,6 +34,12 @@ let currentFilter = 'all';
 let currentActiveView = 'queue';
 let currentHistoryRange = 'all';
 let currentAnalyticsRange = 'all';
+let currentAnalyticsCustomStart = null;
+let currentAnalyticsCustomEnd = null;
+let currentAnalyticsTableSearch = '';
+let currentAnalyticsTableStatus = 'all';
+let currentAnalyticsTablePage = 1;
+let currentAnalyticsPrintTypeMetric = 'jobs';
 export let currentDetectedPrinters = [];
 
 export const DEMO_PRINTER_NAMES = [
@@ -2200,13 +2206,47 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Analytics Timeframe Filter Buttons
+  // Analytics Timeframe Filter Buttons & Custom Range
   document.querySelectorAll('.analytics-filter-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.analytics-filter-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       currentAnalyticsRange = btn.getAttribute('data-range') || 'all';
+      currentAnalyticsTablePage = 1;
+
+      const customContainers = document.querySelectorAll('#analytics-custom-date-container');
+      customContainers.forEach(el => {
+        el.style.display = currentAnalyticsRange === 'custom' ? 'flex' : 'none';
+      });
+
+      if (currentAnalyticsRange !== 'custom') {
+        renderAnalyticsSection(centerId);
+      }
+    });
+  });
+
+  // Custom Range Apply button
+  document.querySelectorAll('#btn-apply-custom-date').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const container = btn.closest('#analytics-custom-date-container') || document;
+      const sInput = container.querySelector('#analytics-custom-start');
+      const eInput = container.querySelector('#analytics-custom-end');
+      if (!sInput?.value || !eInput?.value) {
+        showToast("Please choose both start and end dates", "warning");
+        return;
+      }
+      currentAnalyticsCustomStart = sInput.value;
+      currentAnalyticsCustomEnd = eInput.value;
+      currentAnalyticsTablePage = 1;
       renderAnalyticsSection(centerId);
+      showToast(`Applied custom date filter: ${sInput.value} to ${eInput.value}`, "info");
+    });
+  });
+
+  // Analytics CSV Export Action Button
+  document.querySelectorAll('#btn-export-analytics-csv').forEach(btn => {
+    btn.addEventListener('click', () => {
+      exportAnalyticsToCSV(centerId);
     });
   });
 
@@ -2459,11 +2499,11 @@ export function getYearCycle(dateInput = new Date()) {
   return `${startYear} - ${endYear}`;
 }
 
-function filterJobsByDateRange(jobs, range) {
+export function filterJobsByDateRange(jobs, range, customStart = null, customEnd = null) {
   const now = new Date();
   const nowMs = now.getTime();
 
-  return jobs.filter(job => {
+  return (jobs || []).filter(job => {
     const jobDate = new Date(job.createdAt || job.updatedAt || 0);
     if (isNaN(jobDate.getTime()) || jobDate.getTime() === 0) return true;
     const jobMs = jobDate.getTime();
@@ -2474,10 +2514,24 @@ function filterJobsByDateRange(jobs, range) {
         return jobDate.getFullYear() === now.getFullYear() &&
                jobDate.getMonth() === now.getMonth() &&
                jobDate.getDate() === now.getDate();
+      case 'yesterday': {
+        const yest = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+        return jobDate.getFullYear() === yest.getFullYear() &&
+               jobDate.getMonth() === yest.getMonth() &&
+               jobDate.getDate() === yest.getDate();
+      }
       case '7days':
         return diffMs <= 7 * 24 * 60 * 60 * 1000 && diffMs >= 0;
       case '30days':
         return diffMs <= 30 * 24 * 60 * 60 * 1000 && diffMs >= 0;
+      case 'this_month':
+        return jobDate.getFullYear() === now.getFullYear() &&
+               jobDate.getMonth() === now.getMonth();
+      case 'prev_month': {
+        const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        return jobDate.getFullYear() === prevMonthDate.getFullYear() &&
+               jobDate.getMonth() === prevMonthDate.getMonth();
+      }
       case '3months':
         return diffMs <= 90 * 24 * 60 * 60 * 1000 && diffMs >= 0;
       case '6months':
@@ -2487,6 +2541,12 @@ function filterJobsByDateRange(jobs, range) {
         const currentCycle = getYearCycle(now);
         const jobCycle = getYearCycle(jobDate);
         return jobCycle === currentCycle || (diffMs <= 365 * 24 * 60 * 60 * 1000 && diffMs >= 0);
+      }
+      case 'custom': {
+        if (!customStart || !customEnd) return true;
+        const s = new Date(customStart + "T00:00:00.000").getTime();
+        const e = new Date(customEnd + "T23:59:59.999").getTime();
+        return jobMs >= s && jobMs <= e;
       }
       case 'all':
       default:
@@ -3133,15 +3193,106 @@ function populateQRModal(center) {
   });
 }
 
+export function isCollectedPayment(job) {
+  if (!job) return false;
+  return job.status === 'completed' || job.paymentStatus === 'paid';
+}
+
 export function renderAnalytics(centerId) {
   return renderAnalyticsSection(centerId);
+}
+
+export function exportAnalyticsToCSV(centerId) {
+  const user = auth.getCurrentUser();
+  const effectiveCenterId = centerId || user?.centerId || stateStore.getCenters()[0]?.centerId;
+  const allJobs = stateStore.getJobs(effectiveCenterId);
+  const filteredJobs = filterJobsByDateRange(allJobs, currentAnalyticsRange, currentAnalyticsCustomStart, currentAnalyticsCustomEnd);
+
+  if (!filteredJobs || filteredJobs.length === 0) {
+    showToast("No records available to export for the selected period", "info");
+    return;
+  }
+
+  // Formula injection protection: sanitize untrusted text cells starting with =, +, -, @, \t, \r
+  const sanitizeCell = (val) => {
+    if (val === null || val === undefined) return '""';
+    let str = String(val).replace(/"/g, '""');
+    if (/^[=+\-@\t\r]/.test(str)) {
+      str = "'" + str;
+    }
+    return `"${str}"`;
+  };
+
+  const headers = [
+    "Order Reference",
+    "Tracking Token",
+    "Submitted Date/Time",
+    "Completed Date/Time",
+    "Print Type",
+    "Sides",
+    "Paper Size",
+    "Copies",
+    "Document Pages",
+    "Total Billable Sheets",
+    "Quoted Total (INR)",
+    "Confirmed Payment (INR)",
+    "Payment Status",
+    "Payment Method",
+    "Job Status",
+    "Assigned Printer"
+  ];
+
+  const rows = filteredJobs.map(j => {
+    const isCompleted = j.status === 'completed';
+    const isPaid = isCollectedPayment(j);
+    const paidAmount = isPaid ? (Number(j.amountPaise ? j.amountPaise / 100 : j.estimatedAmount) || 0) : 0;
+    const quotedAmount = Number(j.amountPaise ? j.amountPaise / 100 : j.estimatedAmount) || 0;
+    const totalPages = (j.pageCount || 1) * (j.copies || 1);
+    const billableSheets = j.duplex ? Math.ceil(totalPages / 2) : totalPages;
+
+    return [
+      sanitizeCell(j.jobId),
+      sanitizeCell(j.trackingToken || ''),
+      sanitizeCell(j.createdAt || ''),
+      sanitizeCell(j.completedAt || ''),
+      sanitizeCell(j.colorMode === 'color' ? 'Color' : 'Black & White'),
+      sanitizeCell(j.duplex ? '2-Sided (Duplex)' : '1-Sided (Single)'),
+      sanitizeCell(j.paperSize || 'A4'),
+      j.copies || 1,
+      j.pageCount || 1,
+      billableSheets,
+      quotedAmount.toFixed(2),
+      paidAmount.toFixed(2),
+      sanitizeCell(j.paymentStatus || 'pending'),
+      sanitizeCell(j.paymentMethod || 'cash'),
+      sanitizeCell(j.status),
+      sanitizeCell(j.assignedPrinter || 'Store Default')
+    ].join(',');
+  });
+
+  const csvContent = "\uFEFF" + [headers.join(','), ...rows].join('\r\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const dateStr = new Date().toISOString().split('T')[0];
+  a.href = url;
+  a.download = `smartprint_analytics_${effectiveCenterId || 'store'}_${currentAnalyticsRange}_${dateStr}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  showToast(`Exported ${filteredJobs.length} orders to CSV successfully!`, "success");
 }
 
 export function renderAnalyticsSection(centerId) {
   const container = document.getElementById('analytics-content-view') || document.getElementById('analytics-content-container');
   if (!container) return;
 
-  const allJobs = stateStore.getJobs(centerId);
+  const user = auth.getCurrentUser();
+  const effectiveCenterId = centerId || user?.centerId || stateStore.getCenters()[0]?.centerId;
+  const center = stateStore.getCenter(effectiveCenterId) || {};
+  const allJobs = stateStore.getJobs(effectiveCenterId);
   const currentCycle = getYearCycle(new Date());
 
   // Dynamic Year cycle label in Analytics filter tab
@@ -3149,34 +3300,61 @@ export function renderAnalyticsSection(centerId) {
   if (yearTabLabel) yearTabLabel.textContent = currentCycle;
 
   // Filter jobs for selected analytics range
-  const filteredJobs = filterJobsByDateRange(allJobs, currentAnalyticsRange);
+  const filteredJobs = filterJobsByDateRange(allJobs, currentAnalyticsRange, currentAnalyticsCustomStart, currentAnalyticsCustomEnd);
+
+  // Range Display Names
+  const rangeNames = {
+    all: 'All Time',
+    today: 'Today',
+    yesterday: 'Yesterday',
+    '7days': 'Last 7 Days',
+    '30days': 'Last 30 Days',
+    this_month: 'This Month',
+    prev_month: 'Previous Month',
+    '3months': 'Last 3 Months',
+    '6months': 'Last 6 Months',
+    '1year': `Annual Cycle (${currentCycle})`,
+    custom: `Custom Range (${currentAnalyticsCustomStart || 'Start'} to ${currentAnalyticsCustomEnd || 'End'})`
+  };
+  const activeLabel = rangeNames[currentAnalyticsRange] || 'Custom Range';
 
   // Update badge and subtext
   const totalBadge = document.getElementById('analytics-total-badge');
-  if (totalBadge) totalBadge.textContent = `${filteredJobs.length} Orders`;
+  if (totalBadge) totalBadge.textContent = `${filteredJobs.length} Orders in Period`;
 
   const subtextEl = document.getElementById('analytics-filter-subtext');
   if (subtextEl) {
-    const rangeNames = {
-      all: 'All Time',
-      today: 'Today',
-      '7days': 'Last 7 Days',
-      '30days': 'Last 30 Days',
-      '3months': 'Last 3 Months',
-      '6months': 'Last 6 Months',
-      '1year': `Annual Cycle (${currentCycle})`
-    };
-    const activeLabel = rangeNames[currentAnalyticsRange] || 'Custom';
-    subtextEl.textContent = `Showing analytics for: ${activeLabel} • ${filteredJobs.length} total orders analyzed • Updated in real-time`;
+    subtextEl.textContent = `Showing analytics for: ${activeLabel} • ${filteredJobs.length} orders in period • Real-time verified store data`;
   }
 
+  // 1. Metric Calculations
+  const completedJobs = filteredJobs.filter(j => j.status === 'completed');
+  const liveBacklogJobs = allJobs.filter(j => ['pending_confirmation', 'approved_awaiting_cash', 'payment_confirmed', 'queued', 'under_review', 'processing', 'printing'].includes(j.status));
+  const approvedAwaitingCashJobs = filteredJobs.filter(j => j.status === 'approved_awaiting_cash');
+  const rejectedJobs = filteredJobs.filter(j => j.status === 'rejected' || j.status === 'failed');
+
+  // Revenue rules: Confirmed cash collections during period only
+  const totalRevenue = completedJobs.reduce((sum, j) => sum + (Number(j.amountPaise ? j.amountPaise / 100 : j.estimatedAmount) || 0), 0);
+  const outstandingApprovedPaise = approvedAwaitingCashJobs.reduce((sum, j) => sum + (Number(j.amountPaise) || (j.estimatedAmount ? j.estimatedAmount * 100 : 0)), 0);
+  const outstandingAmount = outstandingApprovedPaise / 100;
+  const grossPotentialRevenue = totalRevenue + outstandingAmount;
+
+  const totalPages = completedJobs.reduce((sum, j) => sum + ((j.pageCount || 1) * (j.copies || 1)), 0);
+  const avgOrderValue = completedJobs.length > 0 ? (totalRevenue / completedJobs.length) : 0;
+  const avgPagesPerOrder = completedJobs.length > 0 ? (totalPages / completedJobs.length).toFixed(1) : '0';
+
+  const completionRate = filteredJobs.length > 0 ? Math.round((completedJobs.length / filteredJobs.length) * 100) : 0;
+  const rejectionRate = filteredJobs.length > 0 ? Math.round((rejectedJobs.length / filteredJobs.length) * 100) : 0;
+  const pendingRate = Math.max(0, 100 - completionRate - rejectionRate);
+
+  // If no records in range, render informative empty state
   if (filteredJobs.length === 0) {
     container.innerHTML = `
-      <div class="glass-panel text-center" style="padding: 3.5rem 1.5rem;">
+      <div class="glass-panel text-center" style="padding: 3.5rem 1.5rem; margin-bottom: 2rem;">
         <div class="empty-state-icon" style="font-size: 2.5rem; margin-bottom: 0.75rem;">📊</div>
-        <h3 style="font-size: 1.15rem; margin-bottom: 0.5rem; color: var(--text-main);">No Orders Found in Selected Range</h3>
-        <p class="text-sm text-muted" style="max-width: 420px; margin: 0 auto 1.25rem;">
-          There is no print activity recorded for this timeframe. Select another filter or view all-time analytics.
+        <h3 style="font-size: 1.15rem; margin-bottom: 0.5rem; color: var(--text-main);">No Orders Found for ${escapeHtml(activeLabel)}</h3>
+        <p class="text-sm text-muted" style="max-width: 440px; margin: 0 auto 1.25rem;">
+          There is no print activity recorded for this timeframe. Select another filter preset or switch to All Time analytics.
         </p>
         <button type="button" class="btn btn-secondary btn-sm" id="btn-analytics-reset-filter">
           Switch to All Time
@@ -3194,30 +3372,15 @@ export function renderAnalyticsSection(centerId) {
     return;
   }
 
-  // 1. Metric Calculations
-  const completedJobs = filteredJobs.filter(j => j.status === 'completed');
-  const pendingJobs = filteredJobs.filter(j => ['submitted', 'in_queue', 'processing'].includes(j.status));
-  const rejectedJobs = filteredJobs.filter(j => j.status === 'rejected');
-
-  const totalRevenue = completedJobs.reduce((sum, j) => sum + (Number(j.estimatedAmount) || 0), 0);
-  const pendingRevenue = pendingJobs.reduce((sum, j) => sum + (Number(j.estimatedAmount) || 0), 0);
-  const grossPotentialRevenue = totalRevenue + pendingRevenue;
-
-  const totalPages = completedJobs.reduce((sum, j) => sum + ((j.pageCount || 1) * (j.copies || 1)), 0);
-  const avgOrderValue = completedJobs.length > 0 ? (totalRevenue / completedJobs.length) : 0;
-  const avgPagesPerOrder = completedJobs.length > 0 ? (totalPages / completedJobs.length).toFixed(1) : '0';
-
-  const completionRate = filteredJobs.length > 0 ? Math.round((completedJobs.length / filteredJobs.length) * 100) : 0;
-  const rejectionRate = filteredJobs.length > 0 ? Math.round((rejectedJobs.length / filteredJobs.length) * 100) : 0;
-  const pendingRate = Math.max(0, 100 - completionRate - rejectionRate);
-
-  // 2. Comparisons (Color vs Mono, Duplex vs Single, Paper Sizes)
+  // 2. Comparisons & Segmented Metrics
   const monoJobs = filteredJobs.filter(j => j.colorMode !== 'color');
   const colorJobs = filteredJobs.filter(j => j.colorMode === 'color');
   const monoPercent = filteredJobs.length > 0 ? Math.round((monoJobs.length / filteredJobs.length) * 100) : 0;
   const colorPercent = 100 - monoPercent;
-  const monoRevenue = monoJobs.filter(j => j.status === 'completed').reduce((sum, j) => sum + (Number(j.estimatedAmount) || 0), 0);
-  const colorRevenue = colorJobs.filter(j => j.status === 'completed').reduce((sum, j) => sum + (Number(j.estimatedAmount) || 0), 0);
+  const monoRevenue = monoJobs.filter(j => j.status === 'completed').reduce((sum, j) => sum + (Number(j.amountPaise ? j.amountPaise / 100 : j.estimatedAmount) || 0), 0);
+  const colorRevenue = colorJobs.filter(j => j.status === 'completed').reduce((sum, j) => sum + (Number(j.amountPaise ? j.amountPaise / 100 : j.estimatedAmount) || 0), 0);
+  const monoPages = monoJobs.filter(j => j.status === 'completed').reduce((sum, j) => sum + ((j.pageCount || 1) * (j.copies || 1)), 0);
+  const colorPages = colorJobs.filter(j => j.status === 'completed').reduce((sum, j) => sum + ((j.pageCount || 1) * (j.copies || 1)), 0);
 
   const duplexJobs = filteredJobs.filter(j => Boolean(j.duplex));
   const singleJobs = filteredJobs.filter(j => !j.duplex);
@@ -3225,19 +3388,49 @@ export function renderAnalyticsSection(centerId) {
   const singlePercent = 100 - duplexPercent;
   const sheetsSaved = duplexJobs.reduce((sum, j) => sum + Math.max(1, Math.floor(((j.pageCount || 1) * (j.copies || 1)) / 2)), 0);
 
-  const a4Count = filteredJobs.filter(j => (j.paperSize || '').toUpperCase().includes('A4')).length;
-  const a3Count = filteredJobs.filter(j => (j.paperSize || '').toUpperCase().includes('A3')).length;
-  const legalCount = filteredJobs.filter(j => (j.paperSize || '').toUpperCase().includes('LEGAL')).length;
-  const otherSizesCount = Math.max(0, filteredJobs.length - a4Count - a3Count - legalCount);
+  // Paper Sizes Supported Breakdown
+  const sizeMap = new Map();
+  filteredJobs.forEach(j => {
+    const size = (j.paperSize || 'A4').toUpperCase();
+    if (!sizeMap.has(size)) {
+      sizeMap.set(size, { size, count: 0, completedCount: 0, pages: 0, revenue: 0 });
+    }
+    const s = sizeMap.get(size);
+    s.count += 1;
+    if (j.status === 'completed') {
+      s.completedCount += 1;
+      s.pages += ((j.pageCount || 1) * (j.copies || 1));
+      s.revenue += Number(j.amountPaise ? j.amountPaise / 100 : j.estimatedAmount) || 0;
+    }
+  });
+  const paperSizesList = Array.from(sizeMap.values()).sort((a, b) => b.count - a.count);
 
-  // 3. Daily / Timeline Aggregation for SVG Chart & Detail Table
+  // Print Service Combinations (B&W Single, B&W Duplex, Color Single, Color Duplex)
+  const serviceStats = {
+    bwSingle: { label: 'B&W Single-Sided', jobs: 0, revenue: 0, pages: 0 },
+    bwDouble: { label: 'B&W Double-Sided', jobs: 0, revenue: 0, pages: 0 },
+    colorSingle: { label: 'Color Single-Sided', jobs: 0, revenue: 0, pages: 0 },
+    colorDouble: { label: 'Color Double-Sided', jobs: 0, revenue: 0, pages: 0 }
+  };
+  completedJobs.forEach(j => {
+    const isC = j.colorMode === 'color';
+    const isD = Boolean(j.duplex);
+    const key = isC ? (isD ? 'colorDouble' : 'colorSingle') : (isD ? 'bwDouble' : 'bwSingle');
+    const pgs = (j.pageCount || 1) * (j.copies || 1);
+    const rev = Number(j.amountPaise ? j.amountPaise / 100 : j.estimatedAmount) || 0;
+    serviceStats[key].jobs += 1;
+    serviceStats[key].pages += pgs;
+    serviceStats[key].revenue += rev;
+  });
+
+  // Daily Timeline Buckets for Line Chart & Bar Volume Chart
   const dayBuckets = new Map();
   filteredJobs.forEach(job => {
     const rawDate = job.createdAt || job.updatedAt || new Date().toISOString();
     const d = new Date(rawDate);
     const dateKey = isNaN(d.getTime()) ? 'Recent' : d.toISOString().split('T')[0];
     const isCompleted = job.status === 'completed';
-    const isRejected = job.status === 'rejected';
+    const isRejected = job.status === 'rejected' || job.status === 'failed';
 
     if (!dayBuckets.has(dateKey)) {
       dayBuckets.set(dateKey, {
@@ -3258,7 +3451,7 @@ export function renderAnalyticsSection(centerId) {
     b.totalOrders += 1;
     if (isCompleted) {
       b.completedOrders += 1;
-      b.revenue += Number(job.estimatedAmount) || 0;
+      b.revenue += Number(job.amountPaise ? job.amountPaise / 100 : job.estimatedAmount) || 0;
       b.pages += ((job.pageCount || 1) * (job.copies || 1));
     }
     if (isRejected) {
@@ -3274,89 +3467,224 @@ export function renderAnalyticsSection(centerId) {
     }
   });
 
-  // Sort chronologically for chart & table
   const sortedDays = Array.from(dayBuckets.values()).sort((a, b) => a.dateKey.localeCompare(b.dateKey));
   const maxRevenueDay = Math.max(...sortedDays.map(d => d.revenue), 100);
+  const maxOrdersDay = Math.max(...sortedDays.map(d => d.totalOrders), 5);
 
-  // SVG Dimensions
-  const svgWidth = 720;
+  // SVG Dimensions for Chart A (Revenue Line Chart)
+  const svgWidth = 680;
   const svgHeight = 220;
-  const chartPadLeft = 45;
+  const chartPadLeft = 50;
   const chartPadRight = 20;
   const chartPadTop = 25;
   const chartPadBottom = 35;
   const plotWidth = svgWidth - chartPadLeft - chartPadRight;
   const plotHeight = svgHeight - chartPadTop - chartPadBottom;
 
-  const barCount = Math.max(sortedDays.length, 1);
-  const colWidth = plotWidth / barCount;
-  const barWidth = Math.min(Math.max(colWidth * 0.55, 12), 48);
+  // Build Line Chart Coordinates
+  const pointCount = Math.max(sortedDays.length, 1);
+  const stepX = pointCount > 1 ? plotWidth / (pointCount - 1) : plotWidth / 2;
+  const linePoints = sortedDays.map((d, idx) => {
+    const x = pointCount > 1 ? chartPadLeft + (idx * stepX) : chartPadLeft + plotWidth / 2;
+    const yRatio = maxRevenueDay > 0 ? (d.revenue / maxRevenueDay) : 0;
+    const y = chartPadTop + plotHeight * (1 - yRatio);
+    return { x, y, day: d };
+  });
 
-  const barsMarkup = sortedDays.map((day, idx) => {
-    const x = chartPadLeft + (idx * colWidth) + ((colWidth - barWidth) / 2);
-    const barH = maxRevenueDay > 0 ? (day.revenue / maxRevenueDay) * plotHeight : 4;
-    const y = chartPadTop + (plotHeight - Math.max(barH, 4));
-    const titleText = `${day.label} (${day.dateKey}): ₹${day.revenue.toFixed(2)} revenue • ${day.completedOrders}/${day.totalOrders} orders completed`;
+  const polylineStr = linePoints.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const areaPathStr = linePoints.length > 0 
+    ? `M ${linePoints[0].x.toFixed(1)},${(chartPadTop + plotHeight).toFixed(1)} ` +
+      linePoints.map(p => `L ${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ') +
+      ` L ${linePoints[linePoints.length - 1].x.toFixed(1)},${(chartPadTop + plotHeight).toFixed(1)} Z`
+    : '';
+
+  // Chart B: Grouped Volume Bar Markup
+  const colWidth = plotWidth / Math.max(sortedDays.length, 1);
+  const singleBarW = Math.min(Math.max(colWidth * 0.25, 4), 16);
+  const volumeBarsMarkup = sortedDays.map((day, idx) => {
+    const groupX = chartPadLeft + (idx * colWidth) + (colWidth / 2);
+    const subH = maxOrdersDay > 0 ? (day.totalOrders / maxOrdersDay) * plotHeight : 2;
+    const compH = maxOrdersDay > 0 ? (day.completedOrders / maxOrdersDay) * plotHeight : 2;
+    const rejH = maxOrdersDay > 0 ? (day.rejectedOrders / maxOrdersDay) * plotHeight : 2;
+
+    const subY = chartPadTop + (plotHeight - Math.max(subH, 2));
+    const compY = chartPadTop + (plotHeight - Math.max(compH, 2));
+    const rejY = chartPadTop + (plotHeight - Math.max(rejH, 2));
 
     return `
-      <g class="chart-bar-group">
-        <rect class="chart-bar-rect" 
-              x="${x.toFixed(1)}" 
-              y="${y.toFixed(1)}" 
-              width="${barWidth.toFixed(1)}" 
-              height="${Math.max(barH, 4).toFixed(1)}" 
-              rx="4" 
-              ry="4" 
-              fill="url(#revenueGrad)">
-          <title>${escapeHtml(titleText)}</title>
+      <g class="chart-volume-group">
+        <!-- Submitted -->
+        <rect x="${(groupX - singleBarW * 1.6).toFixed(1)}" y="${subY.toFixed(1)}" width="${singleBarW.toFixed(1)}" height="${Math.max(subH, 2).toFixed(1)}" rx="2" fill="#8b5cf6">
+          <title>${escapeHtml(day.label)}: ${day.totalOrders} total submitted</title>
         </rect>
-        <text class="chart-axis-text" 
-              x="${(x + barWidth / 2).toFixed(1)}" 
-              y="${(y - 6).toFixed(1)}" 
-              text-anchor="middle" 
-              font-size="10" 
-              font-weight="600" 
-              fill="var(--text-main)">
-          ${day.revenue > 0 ? `₹${Math.round(day.revenue)}` : ''}
-        </text>
-        <text class="chart-axis-text" 
-              x="${(x + barWidth / 2).toFixed(1)}" 
-              y="${(svgHeight - 12).toFixed(1)}" 
-              text-anchor="middle" 
-              font-size="10">
+        <!-- Completed -->
+        <rect x="${(groupX - singleBarW * 0.4).toFixed(1)}" y="${compY.toFixed(1)}" width="${singleBarW.toFixed(1)}" height="${Math.max(compH, 2).toFixed(1)}" rx="2" fill="#10b981">
+          <title>${escapeHtml(day.label)}: ${day.completedOrders} completed</title>
+        </rect>
+        <!-- Rejected -->
+        <rect x="${(groupX + singleBarW * 0.8).toFixed(1)}" y="${rejY.toFixed(1)}" width="${singleBarW.toFixed(1)}" height="${Math.max(rejH, 2).toFixed(1)}" rx="2" fill="#ef4444">
+          <title>${escapeHtml(day.label)}: ${day.rejectedOrders} rejected</title>
+        </rect>
+        <text class="chart-axis-text" x="${groupX.toFixed(1)}" y="${(svgHeight - 12).toFixed(1)}" text-anchor="middle" font-size="10">
           ${escapeHtml(day.label)}
         </text>
       </g>
     `;
   }).join('');
 
-  // Horizontal Grid Lines
-  const gridLinesMarkup = [0.25, 0.5, 0.75, 1].map(ratio => {
-    const yVal = chartPadTop + plotHeight * (1 - ratio);
-    const amountLabel = Math.round(maxRevenueDay * ratio);
-    return `
-      <g>
-        <line x1="${chartPadLeft}" y1="${yVal.toFixed(1)}" x2="${(svgWidth - chartPadRight).toFixed(1)}" y2="${yVal.toFixed(1)}" class="chart-grid-line" />
-        <text x="${(chartPadLeft - 8)}" y="${(yVal + 3).toFixed(1)}" text-anchor="end" class="chart-axis-text" font-size="9">₹${amountLabel}</text>
-      </g>
-    `;
-  }).join('');
+  // Chart C: Job Status Distribution (Donut Calculation)
+  const statusCounts = {
+    pending_confirmation: allJobs.filter(j => j.status === 'pending_confirmation' || j.status === 'submitted').length,
+    approved_awaiting_cash: allJobs.filter(j => j.status === 'approved_awaiting_cash').length,
+    payment_confirmed_queued: allJobs.filter(j => j.status === 'payment_confirmed' || j.status === 'queued' || j.status === 'under_review').length,
+    printing: allJobs.filter(j => j.status === 'printing').length,
+    completed: allJobs.filter(j => j.status === 'completed').length,
+    rejected_failed: allJobs.filter(j => j.status === 'rejected' || j.status === 'failed' || j.status === 'cancelled').length
+  };
+  const totalStatusJobs = Math.max(Object.values(statusCounts).reduce((a, b) => a + b, 0), 1);
 
-  // 4. Render HTML Structure
+  // Donut Arc generator
+  const donutRadius = 55;
+  const donutCircumference = 2 * Math.PI * donutRadius;
+  let strokeOffset = 0;
+  const donutColors = {
+    pending_confirmation: '#f59e0b',
+    approved_awaiting_cash: '#6366f1',
+    payment_confirmed_queued: '#3b82f6',
+    printing: '#8b5cf6',
+    completed: '#10b981',
+    rejected_failed: '#ef4444'
+  };
+  const donutSlices = Object.entries(statusCounts).map(([key, count]) => {
+    const fraction = count / totalStatusJobs;
+    const strokeDash = fraction * donutCircumference;
+    const offset = strokeOffset;
+    strokeOffset -= strokeDash;
+    return {
+      key,
+      count,
+      percent: Math.round(fraction * 100),
+      strokeDash: `${strokeDash.toFixed(2)} ${donutCircumference.toFixed(2)}`,
+      offset: offset.toFixed(2),
+      color: donutColors[key]
+    };
+  });
+
+  // Chart G: Peak Hours & Days Breakdown
+  const shiftCounts = { morning: 0, midday: 0, evening: 0, night: 0 };
+  const dayOfWeekCounts = { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0, Sun: 0 };
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  filteredJobs.forEach(j => {
+    const d = new Date(j.createdAt || j.updatedAt || 0);
+    if (!isNaN(d.getTime())) {
+      const hr = d.getHours();
+      if (hr >= 8 && hr < 12) shiftCounts.morning++;
+      else if (hr >= 12 && hr < 16) shiftCounts.midday++;
+      else if (hr >= 16 && hr < 20) shiftCounts.evening++;
+      else shiftCounts.night++;
+
+      const dayName = dayNames[d.getDay()];
+      if (dayOfWeekCounts[dayName] !== undefined) {
+        dayOfWeekCounts[dayName]++;
+      }
+    }
+  });
+
+  // Printer Performance
+  const routing = center.printerRouting || { bwPriority: [], colorPriority: [] };
+  const connectedPrinters = Array.from(new Set([
+    ...(routing.bwPriority || []),
+    ...(routing.colorPriority || []),
+    ...(currentDetectedPrinters.map(p => p.name))
+  ])).filter(p => p && p !== 'None');
+
+  // Table filtering & pagination logic
+  let tableFiltered = filteredJobs.slice();
+  if (currentAnalyticsTableStatus && currentAnalyticsTableStatus !== 'all') {
+    tableFiltered = tableFiltered.filter(j => j.status === currentAnalyticsTableStatus);
+  }
+  if (currentAnalyticsTableSearch) {
+    const query = currentAnalyticsTableSearch.toLowerCase().trim();
+    tableFiltered = tableFiltered.filter(j => 
+      (j.jobId && j.jobId.toLowerCase().includes(query)) ||
+      (j.trackingToken && j.trackingToken.toLowerCase().includes(query)) ||
+      (j.paperSize && j.paperSize.toLowerCase().includes(query)) ||
+      (j.customerNote && j.customerNote.toLowerCase().includes(query))
+    );
+  }
+
+  const PAGE_SIZE = 10;
+  const totalPagesCount = Math.max(1, Math.ceil(tableFiltered.length / PAGE_SIZE));
+  if (currentAnalyticsTablePage > totalPagesCount) currentAnalyticsTablePage = totalPagesCount;
+  const pageStart = (currentAnalyticsTablePage - 1) * PAGE_SIZE;
+  const pagedRecords = tableFiltered.slice(pageStart, pageStart + PAGE_SIZE);
+
+  // Render HTML Structure
   container.innerHTML = `
-    <!-- A. KPIs Overview Grid -->
+    <!-- A. KPIs Overview Grid (8 Cards) -->
     <div class="analytics-kpi-grid">
+      <!-- 1. Collected Revenue -->
       <div class="analytics-kpi-card">
         <div class="analytics-kpi-label">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-          Total Revenue
+          Collected Revenue (Total Revenue)
         </div>
         <div class="analytics-kpi-value" style="color: var(--primary-600);">${formatCurrencyINR(totalRevenue)}</div>
         <div class="analytics-kpi-subtext">
-          ${completedJobs.length} completed &bull; Potential: ${formatCurrencyINR(grossPotentialRevenue)}
+          ${completedJobs.length} paid completions &bull; Net verified collections
         </div>
       </div>
 
+      <!-- 2. Total Orders -->
+      <div class="analytics-kpi-card">
+        <div class="analytics-kpi-label">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+          Total Orders
+        </div>
+        <div class="analytics-kpi-value">${filteredJobs.length}</div>
+        <div class="analytics-kpi-subtext">
+          Unique orders created in period
+        </div>
+      </div>
+
+      <!-- 3. Completed Jobs -->
+      <div class="analytics-kpi-card">
+        <div class="analytics-kpi-label">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          Completed Jobs
+        </div>
+        <div class="analytics-kpi-value" style="color: #10b981;">${completedJobs.length}</div>
+        <div class="analytics-kpi-subtext">
+          ${completionRate}% overall fulfillment success
+        </div>
+      </div>
+
+      <!-- 4. Pending Jobs (Live Backlog) -->
+      <div class="analytics-kpi-card">
+        <div class="analytics-kpi-label">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          Pending Jobs
+        </div>
+        <div class="analytics-kpi-value" style="color: #f59e0b;">${liveBacklogJobs.length}</div>
+        <div class="analytics-kpi-subtext">
+          Live actionable backlog across store
+        </div>
+      </div>
+
+      <!-- 5. Billable Pages -->
+      <div class="analytics-kpi-card">
+        <div class="analytics-kpi-label">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+          Billable Pages (Printed)
+        </div>
+        <div class="analytics-kpi-value">${totalPages.toLocaleString()}</div>
+        <div class="analytics-kpi-subtext">
+          Avg ${avgPagesPerOrder} pages per completed job
+        </div>
+      </div>
+
+      <!-- 6. Average Order Value -->
       <div class="analytics-kpi-card">
         <div class="analytics-kpi-label">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
@@ -3364,300 +3692,569 @@ export function renderAnalyticsSection(centerId) {
         </div>
         <div class="analytics-kpi-value">${formatCurrencyINR(avgOrderValue)}</div>
         <div class="analytics-kpi-subtext">
-          Across completed dispatches
+          Across completed cash orders
         </div>
       </div>
 
+      <!-- 7. Outstanding Approved Amount -->
       <div class="analytics-kpi-card">
         <div class="analytics-kpi-label">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
-          Pages Printed
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+          Outstanding Approved
         </div>
-        <div class="analytics-kpi-value">${totalPages.toLocaleString()}</div>
+        <div class="analytics-kpi-value" style="color: #6366f1;">${formatCurrencyINR(outstandingAmount)}</div>
         <div class="analytics-kpi-subtext">
-          Avg ${avgPagesPerOrder} pages per print order
+          ${approvedAwaitingCashJobs.length} orders approved awaiting cash
         </div>
       </div>
 
+      <!-- 8. Failed / Rejected Jobs -->
       <div class="analytics-kpi-card">
         <div class="analytics-kpi-label">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-          Fulfillment Rate
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+          Failed & Rejected Jobs
         </div>
-        <div class="analytics-kpi-value" style="color: #10b981;">${completionRate}%</div>
+        <div class="analytics-kpi-value" style="color: #ef4444;">${rejectedJobs.length}</div>
         <div class="analytics-kpi-subtext">
-          ${completedJobs.length} done &bull; ${rejectedJobs.length} rejected (${rejectionRate}%)
+          ${rejectionRate}% rejection / cancellation rate
         </div>
       </div>
     </div>
 
-    <!-- B. Revenue Timeline Graph Panel -->
-    <div class="analytics-chart-panel">
-      <div class="analytics-chart-header">
-        <div>
-          <h3 style="font-size: 1.05rem; margin-bottom: 0.25rem;">Daily Revenue & Volume Trend</h3>
-          <p class="text-xs text-muted">Daily completed earnings and dispatch distribution over the selected period</p>
-        </div>
-        <div class="flex items-center gap-3">
-          <div class="flex items-center gap-1 text-xs">
-            <span style="width: 10px; height: 10px; border-radius: 2px; background: var(--primary-600);"></span>
-            <span>Daily Revenue (₹)</span>
+    <!-- B. Charts Grid (6 Visual Charts) -->
+    <div class="analytics-charts-grid">
+      <!-- Chart A: Revenue Trend (Smooth Line & Gradient Area) -->
+      <div class="analytics-chart-card chart-revenue-trend">
+        <div class="analytics-chart-top">
+          <div>
+            <div class="analytics-chart-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+              Revenue Trend (Confirmed Collections)
+            </div>
+            <div class="analytics-chart-desc">Confirmed net cash collections grouped by payment/completion date</div>
           </div>
-          <span class="badge" style="background: var(--primary-50); color: var(--primary-700); font-size: 0.75rem;">
-            Peak: ₹${Math.round(maxRevenueDay)}
+          <span class="badge" style="background: var(--primary-100); color: var(--primary-800); font-weight: 600; font-size: 0.75rem;">
+            Peak Day: ₹${Math.round(maxRevenueDay)}
           </span>
         </div>
-      </div>
 
-      <div class="chart-svg-wrapper">
-        <svg viewBox="0 0 ${svgWidth} ${svgHeight}" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: 100%; overflow: visible;">
-          <defs>
-            <linearGradient id="revenueGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stop-color="#8b5cf6" />
-              <stop offset="100%" stop-color="#6366f1" />
-            </linearGradient>
-          </defs>
+        <div class="chart-svg-wrapper">
+          <svg viewBox="0 0 ${svgWidth} ${svgHeight}" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: 100%; overflow: visible;">
+            <defs>
+              <linearGradient id="revenueLineGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.45" />
+                <stop offset="100%" stop-color="#6366f1" stop-opacity="0.02" />
+              </linearGradient>
+            </defs>
 
-          <!-- Axis Lines -->
-          <line x1="${chartPadLeft}" y1="${(svgHeight - chartPadBottom).toFixed(1)}" x2="${(svgWidth - chartPadRight).toFixed(1)}" y2="${(svgHeight - chartPadBottom).toFixed(1)}" stroke="var(--border-subtle)" stroke-width="1" />
-          ${gridLinesMarkup}
+            <!-- Grid Lines -->
+            <line x1="${chartPadLeft}" y1="${(svgHeight - chartPadBottom).toFixed(1)}" x2="${(svgWidth - chartPadRight).toFixed(1)}" y2="${(svgHeight - chartPadBottom).toFixed(1)}" stroke="var(--border-subtle)" stroke-width="1" />
+            <line x1="${chartPadLeft}" y1="${(chartPadTop + plotHeight * 0.5).toFixed(1)}" x2="${(svgWidth - chartPadRight).toFixed(1)}" y2="${(chartPadTop + plotHeight * 0.5).toFixed(1)}" class="chart-grid-line" />
+            <line x1="${chartPadLeft}" y1="${chartPadTop}" x2="${(svgWidth - chartPadRight).toFixed(1)}" y2="${chartPadTop}" class="chart-grid-line" />
 
-          <!-- Bars -->
-          ${barsMarkup}
-        </svg>
-      </div>
-    </div>
+            <!-- Y-Axis Labels -->
+            <text x="${chartPadLeft - 8}" y="${(svgHeight - chartPadBottom).toFixed(1)}" text-anchor="end" class="chart-axis-text">₹0</text>
+            <text x="${chartPadLeft - 8}" y="${(chartPadTop + plotHeight * 0.5 + 4).toFixed(1)}" text-anchor="end" class="chart-axis-text">₹${Math.round(maxRevenueDay / 2)}</text>
+            <text x="${chartPadLeft - 8}" y="${chartPadTop + 4}" text-anchor="end" class="chart-axis-text">₹${Math.round(maxRevenueDay)}</text>
 
-    <!-- C. Comparative Analytics (Comparisms) Grid -->
-    <div class="analytics-comparisons-grid">
-      <!-- 1. Color vs Monochrome -->
-      <div class="comparison-card">
-        <div class="comparison-card-header">
-          <div class="comparison-card-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 0 20Z"></path></svg>
-            Color vs Monochrome (B&W)
-          </div>
-          <span class="badge" style="background: var(--bg-surface-subtle); font-size: 0.75rem;">${filteredJobs.length} Jobs</span>
-        </div>
+            <!-- Area & Line Path -->
+            ${areaPathStr ? `<path d="${areaPathStr}" fill="url(#revenueLineGrad)" />` : ''}
+            ${linePoints.length > 1 ? `<polyline points="${polylineStr}" fill="none" stroke="#7c3aed" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />` : ''}
 
-        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-          <div class="flex justify-between items-center text-xs">
-            <div class="flex items-center gap-2">
-              <span style="width: 10px; height: 10px; border-radius: 2px; background: #64748b;"></span>
-              <strong>Black & White (B&W)</strong>
-            </div>
-            <span>${monoPercent}% (${monoJobs.length} orders &bull; ${formatCurrencyINR(monoRevenue)})</span>
-          </div>
-
-          <div class="flex justify-between items-center text-xs">
-            <div class="flex items-center gap-2">
-              <span style="width: 10px; height: 10px; border-radius: 2px; background: var(--primary-600);"></span>
-              <strong>Full Color</strong>
-            </div>
-            <span>${colorPercent}% (${colorJobs.length} orders &bull; ${formatCurrencyINR(colorRevenue)})</span>
-          </div>
-
-          <div class="comparison-meter-track" title="B&W: ${monoPercent}% | Color: ${colorPercent}%">
-            <div style="width: ${monoPercent}%; background: #64748b;"></div>
-            <div style="width: ${colorPercent}%; background: var(--primary-600);"></div>
-          </div>
+            <!-- Data Dots -->
+            ${linePoints.map(p => `
+              <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4.5" fill="#7c3aed" stroke="#ffffff" stroke-width="2">
+                <title>${escapeHtml(p.day.label)} (${escapeHtml(p.day.dateKey)}): ₹${p.day.revenue.toFixed(2)} (${p.day.completedOrders} completed)</title>
+              </circle>
+              <text class="chart-axis-text" x="${p.x.toFixed(1)}" y="${(svgHeight - 12).toFixed(1)}" text-anchor="middle">
+                ${escapeHtml(p.day.label)}
+              </text>
+            `).join('')}
+          </svg>
         </div>
       </div>
 
-      <!-- 2. Single-Sided vs Duplex -->
-      <div class="comparison-card">
-        <div class="comparison-card-header">
-          <div class="comparison-card-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="8" y1="10" x2="16" y2="10"></line></svg>
-            Paper Efficiency (1-Sided vs Duplex)
+      <!-- Chart B: Order Volume Trend (Grouped Bars) -->
+      <div class="analytics-chart-card chart-volume-trend">
+        <div class="analytics-chart-top">
+          <div>
+            <div class="analytics-chart-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+              Order Volume Trend
+            </div>
+            <div class="analytics-chart-desc">Unique submitted, completed, and rejected orders per day</div>
+          </div>
+          <div class="flex items-center gap-2" style="font-size: 0.75rem;">
+            <span style="display: inline-flex; align-items: center; gap: 0.25rem;"><span style="width: 8px; height: 8px; background: #8b5cf6; border-radius: 2px;"></span>Submitted</span>
+            <span style="display: inline-flex; align-items: center; gap: 0.25rem;"><span style="width: 8px; height: 8px; background: #10b981; border-radius: 2px;"></span>Completed</span>
+            <span style="display: inline-flex; align-items: center; gap: 0.25rem;"><span style="width: 8px; height: 8px; background: #ef4444; border-radius: 2px;"></span>Rejected</span>
+          </div>
+        </div>
+
+        <div class="chart-svg-wrapper">
+          <svg viewBox="0 0 ${svgWidth} ${svgHeight}" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: 100%; overflow: visible;">
+            <!-- Axis & Grid -->
+            <line x1="${chartPadLeft}" y1="${(svgHeight - chartPadBottom).toFixed(1)}" x2="${(svgWidth - chartPadRight).toFixed(1)}" y2="${(svgHeight - chartPadBottom).toFixed(1)}" stroke="var(--border-subtle)" stroke-width="1" />
+            <line x1="${chartPadLeft}" y1="${(chartPadTop + plotHeight * 0.5).toFixed(1)}" x2="${(svgWidth - chartPadRight).toFixed(1)}" y2="${(chartPadTop + plotHeight * 0.5).toFixed(1)}" class="chart-grid-line" />
+            <line x1="${chartPadLeft}" y1="${chartPadTop}" x2="${(svgWidth - chartPadRight).toFixed(1)}" y2="${chartPadTop}" class="chart-grid-line" />
+
+            <text x="${chartPadLeft - 8}" y="${(svgHeight - chartPadBottom).toFixed(1)}" text-anchor="end" class="chart-axis-text">0</text>
+            <text x="${chartPadLeft - 8}" y="${(chartPadTop + plotHeight * 0.5 + 4).toFixed(1)}" text-anchor="end" class="chart-axis-text">${Math.round(maxOrdersDay / 2)}</text>
+            <text x="${chartPadLeft - 8}" y="${chartPadTop + 4}" text-anchor="end" class="chart-axis-text">${maxOrdersDay}</text>
+
+            <!-- Bars -->
+            ${volumeBarsMarkup}
+          </svg>
+        </div>
+      </div>
+
+      <!-- Chart C: Job Status Distribution (Donut Chart) -->
+      <div class="analytics-chart-card chart-status-donut">
+        <div class="analytics-chart-top">
+          <div>
+            <div class="analytics-chart-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="4"></circle></svg>
+              Job Status Distribution
+            </div>
+            <div class="analytics-chart-desc">Live current store state across all lifecycle transitions</div>
+          </div>
+          <span class="badge" style="background: rgba(16, 185, 129, 0.12); color: #059669; font-size: 0.75rem;">
+            ${allJobs.length} Total Store Records
+          </span>
+        </div>
+
+        <div class="donut-layout">
+          <div class="donut-svg-box">
+            <svg viewBox="0 0 140 140" style="transform: rotate(-90deg); width: 100%; height: 100%;">
+              <!-- Background circle -->
+              <circle cx="70" cy="70" r="${donutRadius}" fill="none" stroke="var(--bg-surface-subtle)" stroke-width="16" />
+              <!-- Slices -->
+              ${donutSlices.map(s => `
+                <circle cx="70" cy="70" r="${donutRadius}" fill="none" stroke="${s.color}" stroke-width="16"
+                        stroke-dasharray="${s.strokeDash}" stroke-dashoffset="${s.offset}" />
+              `).join('')}
+            </svg>
+            <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none;">
+              <span style="font-size: 1.35rem; font-weight: 800; color: var(--text-main);">${allJobs.length}</span>
+              <span style="font-size: 0.65rem; color: var(--text-muted); font-weight: 600;">ACTIVE JOBS</span>
+            </div>
+          </div>
+
+          <div class="donut-legend">
+            <div class="donut-legend-item">
+              <span class="flex items-center gap-2"><span class="donut-legend-color" style="background: #f59e0b;"></span>Pending Confirmation</span>
+              <strong>${statusCounts.pending_confirmation}</strong>
+            </div>
+            <div class="donut-legend-item">
+              <span class="flex items-center gap-2"><span class="donut-legend-color" style="background: #6366f1;"></span>Approved Awaiting Cash</span>
+              <strong>${statusCounts.approved_awaiting_cash}</strong>
+            </div>
+            <div class="donut-legend-item">
+              <span class="flex items-center gap-2"><span class="donut-legend-color" style="background: #3b82f6;"></span>Queued / Confirmed</span>
+              <strong>${statusCounts.payment_confirmed_queued}</strong>
+            </div>
+            <div class="donut-legend-item">
+              <span class="flex items-center gap-2"><span class="donut-legend-color" style="background: #8b5cf6;"></span>Printing</span>
+              <strong>${statusCounts.printing}</strong>
+            </div>
+            <div class="donut-legend-item">
+              <span class="flex items-center gap-2"><span class="donut-legend-color" style="background: #10b981;"></span>Completed</span>
+              <strong>${statusCounts.completed}</strong>
+            </div>
+            <div class="donut-legend-item">
+              <span class="flex items-center gap-2"><span class="donut-legend-color" style="background: #ef4444;"></span>Rejected / Failed</span>
+              <strong>${statusCounts.rejected_failed}</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chart D: Print Type Analysis (Color vs Monochrome with Metric Switcher) -->
+      <div class="analytics-chart-card chart-print-type">
+        <div class="analytics-chart-top">
+          <div>
+            <div class="analytics-chart-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 0 20Z"></path></svg>
+              Print Type Analysis (Color vs Monochrome)
+            </div>
+            <div class="analytics-chart-desc">Compare B&W and color split across jobs, pages, or confirmed revenue</div>
+          </div>
+
+          <!-- Metric Switcher -->
+          <div class="metric-switcher" id="print-type-metric-switcher">
+            <button type="button" class="metric-switch-btn ${currentAnalyticsPrintTypeMetric === 'jobs' ? 'active' : ''}" data-metric="jobs">Jobs</button>
+            <button type="button" class="metric-switch-btn ${currentAnalyticsPrintTypeMetric === 'pages' ? 'active' : ''}" data-metric="pages">Pages</button>
+            <button type="button" class="metric-switch-btn ${currentAnalyticsPrintTypeMetric === 'revenue' ? 'active' : ''}" data-metric="revenue">Revenue</button>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 1rem; padding-top: 0.5rem;">
+          ${(() => {
+            let mVal, cVal, mLabel, cLabel, mPct, cPct;
+            if (currentAnalyticsPrintTypeMetric === 'pages') {
+              mVal = monoPages;
+              cVal = colorPages;
+              const totalP = Math.max(mVal + cVal, 1);
+              mPct = Math.round((mVal / totalP) * 100);
+              cPct = 100 - mPct;
+              mLabel = `${mVal.toLocaleString()} billable pages`;
+              cLabel = `${cVal.toLocaleString()} billable pages`;
+            } else if (currentAnalyticsPrintTypeMetric === 'revenue') {
+              mVal = monoRevenue;
+              cVal = colorRevenue;
+              const totalR = Math.max(mVal + cVal, 1);
+              mPct = Math.round((mVal / totalR) * 100);
+              cPct = 100 - mPct;
+              mLabel = formatCurrencyINR(mVal);
+              cLabel = formatCurrencyINR(cVal);
+            } else {
+              mVal = monoJobs.length;
+              cVal = colorJobs.length;
+              mPct = monoPercent;
+              cPct = colorPercent;
+              mLabel = `${mVal} completed orders`;
+              cLabel = `${cVal} completed orders`;
+            }
+
+            return `
+              <div class="flex justify-between items-center text-sm">
+                <div class="flex items-center gap-2">
+                  <span style="width: 12px; height: 12px; border-radius: 3px; background: #64748b;"></span>
+                  <strong>Black & White (B&W)</strong>
+                </div>
+                <span><strong>${mPct}%</strong> (${mLabel})</span>
+              </div>
+
+              <div class="flex justify-between items-center text-sm">
+                <div class="flex items-center gap-2">
+                  <span style="width: 12px; height: 12px; border-radius: 3px; background: var(--primary-600);"></span>
+                  <strong>Full Color</strong>
+                </div>
+                <span><strong>${cPct}%</strong> (${cLabel})</span>
+              </div>
+
+              <div class="comparison-meter-track" style="height: 14px; border-radius: 7px;" title="B&W: ${mPct}% | Color: ${cPct}%">
+                <div style="width: ${mPct}%; background: #64748b;"></div>
+                <div style="width: ${cPct}%; background: var(--primary-600);"></div>
+              </div>
+            `;
+          })()}
+
+          <p class="text-xs text-muted" style="margin-top: 0.25rem;">
+            Tip: B&W single-sided remains the most common counter xerox format, while color orders yield higher average basket value.
+          </p>
+        </div>
+      </div>
+
+      <!-- Chart E: Paper Size Popularity (Horizontal Bar Chart) -->
+      <div class="analytics-chart-card chart-paper-size">
+        <div class="analytics-chart-top">
+          <div>
+            <div class="analytics-chart-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+              Paper Size Popularity
+            </div>
+            <div class="analytics-chart-desc">Billable pages and order frequency by paper format</div>
+          </div>
+          <span class="badge" style="background: var(--bg-surface-subtle); font-size: 0.75rem;">Supported Media</span>
+        </div>
+
+        <div class="hbar-list">
+          ${paperSizesList.map(item => {
+            const pct = filteredJobs.length > 0 ? Math.round((item.count / filteredJobs.length) * 100) : 0;
+            return `
+              <div class="hbar-item">
+                <div class="hbar-header">
+                  <span><strong>${escapeHtml(item.size)}</strong> (${item.count} orders)</span>
+                  <span class="text-muted">${item.pages.toLocaleString()} pgs &bull; ${pct}%</span>
+                </div>
+                <div class="hbar-track">
+                  <div class="hbar-fill" style="width: ${pct}%; background: ${item.size === 'A4' ? 'var(--primary-600)' : item.size === 'A3' ? '#3b82f6' : '#8b5cf6'};"></div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+
+      <!-- Chart F: Revenue by Print Service (Service Combinations) -->
+      <div class="analytics-chart-card chart-service-revenue">
+        <div class="analytics-chart-top">
+          <div>
+            <div class="analytics-chart-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+              Revenue by Print Service & 1-Sided vs Duplex
+            </div>
+            <div class="analytics-chart-desc">Collections derived from confirmed rates and single/double-sided options</div>
           </div>
           <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #059669; font-size: 0.75rem;">
             ~${sheetsSaved} Sheets Saved
           </span>
         </div>
 
-        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-          <div class="flex justify-between items-center text-xs">
-            <div class="flex items-center gap-2">
-              <span style="width: 10px; height: 10px; border-radius: 2px; background: #94a3b8;"></span>
-              <strong>1-Sided (Single)</strong>
+        <div class="print-services-grid">
+          ${Object.values(serviceStats).map(s => `
+            <div class="service-card">
+              <span class="service-card-title">${escapeHtml(s.label)}</span>
+              <span class="service-card-revenue">${formatCurrencyINR(s.revenue)}</span>
+              <span class="service-card-count">${s.jobs} jobs &bull; ${s.pages} pgs</span>
             </div>
-            <span>${singlePercent}% (${singleJobs.length} orders)</span>
-          </div>
+          `).join('')}
+        </div>
 
-          <div class="flex justify-between items-center text-xs">
-            <div class="flex items-center gap-2">
-              <span style="width: 10px; height: 10px; border-radius: 2px; background: #10b981;"></span>
-              <strong>2-Sided (Duplex)</strong>
-            </div>
-            <span>${duplexPercent}% (${duplexJobs.length} orders)</span>
+        <!-- 1-Sided vs Duplex Efficiency Meter -->
+        <div style="margin-top: 0.75rem;">
+          <div class="flex justify-between items-center text-xs" style="margin-bottom: 0.35rem;">
+            <span><strong>1-Sided</strong>: ${singlePercent}% (${singleJobs.length} orders)</span>
+            <span><strong>2-Sided (Duplex)</strong>: ${duplexPercent}% (${duplexJobs.length} orders)</span>
           </div>
-
           <div class="comparison-meter-track" title="1-Sided: ${singlePercent}% | Duplex: ${duplexPercent}%">
             <div style="width: ${singlePercent}%; background: #94a3b8;"></div>
             <div style="width: ${duplexPercent}%; background: #10b981;"></div>
           </div>
         </div>
       </div>
+    </div>
 
-      <!-- 3. Fulfillment & Rejection Breakdown -->
-      <div class="comparison-card">
-        <div class="comparison-card-header">
-          <div class="comparison-card-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
-            Fulfillment & Order Status
+    <!-- C. Peak Hours & Operational Traffic Section -->
+    <div class="analytics-chart-card chart-peak-hours" style="margin-bottom: 1.75rem;">
+      <div class="analytics-chart-top">
+        <div>
+          <div class="analytics-chart-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            Peak Operating Hours & Weekly Load
           </div>
-          <span class="badge" style="background: var(--bg-surface-subtle); font-size: 0.75rem;">
-            ${completionRate}% Success
-          </span>
-        </div>
-
-        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-          <div class="flex justify-between items-center text-xs">
-            <div class="flex items-center gap-2">
-              <span style="width: 10px; height: 10px; border-radius: 2px; background: #10b981;"></span>
-              <span>Completed</span>
-            </div>
-            <strong>${completedJobs.length} (${completionRate}%)</strong>
-          </div>
-
-          <div class="flex justify-between items-center text-xs">
-            <div class="flex items-center gap-2">
-              <span style="width: 10px; height: 10px; border-radius: 2px; background: #f59e0b;"></span>
-              <span>In Queue / Processing</span>
-            </div>
-            <strong>${pendingJobs.length} (${pendingRate}%)</strong>
-          </div>
-
-          <div class="flex justify-between items-center text-xs">
-            <div class="flex items-center gap-2">
-              <span style="width: 10px; height: 10px; border-radius: 2px; background: #ef4444;"></span>
-              <span>Rejected Prints</span>
-            </div>
-            <strong>${rejectedJobs.length} (${rejectionRate}%)</strong>
-          </div>
-
-          <div class="comparison-meter-track" title="Completed: ${completionRate}% | Pending: ${pendingRate}% | Rejected: ${rejectionRate}%">
-            <div style="width: ${completionRate}%; background: #10b981;"></div>
-            <div style="width: ${pendingRate}%; background: #f59e0b;"></div>
-            <div style="width: ${rejectionRate}%; background: #ef4444;"></div>
-          </div>
+          <div class="analytics-chart-desc">Traffic distribution by work shift and weekday in store timezone (IST)</div>
         </div>
       </div>
 
-      <!-- 4. Paper Size Distribution -->
-      <div class="comparison-card">
-        <div class="comparison-card-header">
-          <div class="comparison-card-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-            Paper Size Distribution
-          </div>
-          <span class="badge" style="background: var(--bg-surface-subtle); font-size: 0.75rem;">Standards</span>
+      <div class="peak-hours-grid">
+        <div class="peak-card">
+          <span class="peak-card-time">Morning (8am - 12pm)</span>
+          <span class="peak-card-count">${shiftCounts.morning}</span>
+          <span class="text-xs text-muted">Orders</span>
         </div>
-
-        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-          <div class="flex justify-between items-center text-xs">
-            <span>A4 Standard Paper</span>
-            <strong>${a4Count} (${filteredJobs.length > 0 ? Math.round((a4Count / filteredJobs.length) * 100) : 0}%)</strong>
-          </div>
-
-          <div class="flex justify-between items-center text-xs">
-            <span>A3 Large Paper</span>
-            <strong>${a3Count} (${filteredJobs.length > 0 ? Math.round((a3Count / filteredJobs.length) * 100) : 0}%)</strong>
-          </div>
-
-          <div class="flex justify-between items-center text-xs">
-            <span>Legal / Other Formats</span>
-            <strong>${legalCount + otherSizesCount} (${filteredJobs.length > 0 ? Math.round(((legalCount + otherSizesCount) / filteredJobs.length) * 100) : 0}%)</strong>
-          </div>
-
-          <div class="comparison-meter-track">
-            <div style="width: ${filteredJobs.length > 0 ? Math.round((a4Count / filteredJobs.length) * 100) : 0}%; background: var(--primary-600);"></div>
-            <div style="width: ${filteredJobs.length > 0 ? Math.round((a3Count / filteredJobs.length) * 100) : 0}%; background: #3b82f6;"></div>
-            <div style="width: ${filteredJobs.length > 0 ? Math.round(((legalCount + otherSizesCount) / filteredJobs.length) * 100) : 0}%; background: #8b5cf6;"></div>
-          </div>
+        <div class="peak-card">
+          <span class="peak-card-time">Midday (12pm - 4pm)</span>
+          <span class="peak-card-count">${shiftCounts.midday}</span>
+          <span class="text-xs text-muted">Orders</span>
+        </div>
+        <div class="peak-card">
+          <span class="peak-card-time">Evening (4pm - 8pm)</span>
+          <span class="peak-card-count">${shiftCounts.evening}</span>
+          <span class="text-xs text-muted">Orders</span>
+        </div>
+        <div class="peak-card">
+          <span class="peak-card-time">Night (8pm - 12am)</span>
+          <span class="peak-card-count">${shiftCounts.night}</span>
+          <span class="text-xs text-muted">Orders</span>
         </div>
       </div>
     </div>
 
-    <!-- D. Full Detail Analytics Breakdown Table -->
+    <!-- D. Hardware & Printer Performance Strip -->
+    ${connectedPrinters.length > 0 ? `
+      <div class="printer-perf-panel analytics-printer-perf">
+        <div class="flex justify-between items-center" style="margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+          <h3 style="font-size: 1rem; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+            Connected Printer Performance
+          </h3>
+          <span class="badge" style="background: rgba(16, 185, 129, 0.12); color: #059669; font-size: 0.75rem;">
+            ${connectedPrinters.length} Devices Online
+          </span>
+        </div>
+
+        <div class="printer-perf-grid">
+          ${connectedPrinters.map(pName => {
+            const printerJobs = completedJobs.filter(j => j.assignedPrinter === pName || (pName.includes('Laser') && j.colorMode !== 'color') || (pName.includes('EcoTank') && j.colorMode === 'color')).length;
+            return `
+              <div class="printer-perf-card">
+                <div>
+                  <div class="font-semibold text-main text-sm">${escapeHtml(pName)}</div>
+                  <div class="text-xs text-muted">${printerJobs} jobs fulfilled in period</div>
+                </div>
+                <span class="badge badge-completed text-xs font-semibold" style="font-size: 0.7rem;">Ready</span>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    ` : ''}
+
+    <!-- E. Full Detail Analytics Breakdown & Searchable Table -->
     <div class="analytics-detail-panel">
-      <div class="flex justify-between items-center" style="margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem;">
+      <div class="flex justify-between items-center" style="margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
         <div>
           <h3 style="font-size: 1.05rem; margin-bottom: 0.25rem;">Full Detail Analytics Breakdown</h3>
-          <p class="text-xs text-muted">Chronological and operational metrics breakdown for in-depth center analysis</p>
+          <p class="text-xs text-muted">Searchable, filterable, and paginated order transaction records for in-depth audits</p>
         </div>
         <span class="badge" style="background: var(--primary-50); color: var(--primary-700); font-weight: 600;">
-          ${sortedDays.length} Active Reporting Dates
+          ${tableFiltered.length} Filtered Records
         </span>
+      </div>
+
+      <!-- Table Toolbar: Search & Status Filter -->
+      <div class="table-toolbar">
+        <div class="table-toolbar-left">
+          <input type="text" id="analytics-table-search-input" class="form-input analytics-table-search" placeholder="Search reference, token, note..." value="${escapeHtml(currentAnalyticsTableSearch)}" style="width: 240px; padding: 0.4rem 0.75rem; font-size: 0.8125rem;" />
+          <select id="analytics-table-status-select" class="form-select analytics-table-status" style="width: 170px; padding: 0.4rem 0.75rem; font-size: 0.8125rem;">
+            <option value="all" ${currentAnalyticsTableStatus === 'all' ? 'selected' : ''}>All Statuses</option>
+            <option value="completed" ${currentAnalyticsTableStatus === 'completed' ? 'selected' : ''}>Completed</option>
+            <option value="approved_awaiting_cash" ${currentAnalyticsTableStatus === 'approved_awaiting_cash' ? 'selected' : ''}>Approved Awaiting Cash</option>
+            <option value="pending_confirmation" ${currentAnalyticsTableStatus === 'pending_confirmation' ? 'selected' : ''}>Pending Confirmation</option>
+            <option value="rejected" ${currentAnalyticsTableStatus === 'rejected' ? 'selected' : ''}>Rejected / Failed</option>
+          </select>
+        </div>
+
+        <div class="text-xs text-muted">
+          Page ${currentAnalyticsTablePage} of ${totalPagesCount}
+        </div>
       </div>
 
       <div class="table-responsive">
         <table class="data-table" id="analytics-detail-table">
           <thead>
             <tr>
-              <th>Date / Period</th>
-              <th>Orders (Completed / Total)</th>
-              <th>Pages Printed</th>
-              <th>Color Share</th>
-              <th>Duplex Share</th>
-              <th>Fulfillment Success</th>
-              <th>Total Revenue</th>
+              <th>Date / Reference</th>
+              <th>Order ID / Token</th>
+              <th>Print Service</th>
+              <th>Paper</th>
+              <th>Copies &amp; Pgs</th>
+              <th>Quoted Total</th>
+              <th>Confirmed Paid</th>
+              <th>Payment</th>
+              <th>Job Status</th>
             </tr>
           </thead>
           <tbody>
-            ${sortedDays.slice().reverse().map(d => {
-              const dayColorPct = d.totalOrders > 0 ? Math.round((d.colorCount / d.totalOrders) * 100) : 0;
-              const dayDuplexPct = d.totalOrders > 0 ? Math.round((d.duplexCount / d.totalOrders) * 100) : 0;
-              const daySuccessPct = d.totalOrders > 0 ? Math.round((d.completedOrders / d.totalOrders) * 100) : 0;
+            ${pagedRecords.length > 0 ? pagedRecords.map(j => {
+              const dateStr = j.createdAt ? new Date(j.createdAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A';
+              const isCompleted = j.status === 'completed';
+              const isPaid = j.paymentStatus === 'paid' || isCompleted;
+              const paidAmount = isPaid ? (Number(j.amountPaise ? j.amountPaise / 100 : j.estimatedAmount) || 0) : 0;
+              const quotedAmount = Number(j.amountPaise ? j.amountPaise / 100 : j.estimatedAmount) || 0;
 
               return `
                 <tr>
                   <td>
-                    <div class="font-medium text-main text-sm">${escapeHtml(d.label)}</div>
-                    <div class="text-xs text-muted">${escapeHtml(d.dateKey)}</div>
+                    <div class="font-medium text-main text-sm">${escapeHtml(dateStr)}</div>
+                    <div class="text-xs text-muted">${escapeHtml(j.jobId)}</div>
                   </td>
-                  <td class="text-sm font-semibold">
-                    ${d.completedOrders} <span class="text-xs text-muted font-normal">/ ${d.totalOrders}</span>
+                  <td>
+                    <span class="badge" style="font-family: monospace; background: var(--bg-surface-subtle);">${escapeHtml(j.trackingToken || 'N/A')}</span>
                   </td>
-                  <td class="text-sm">${d.pages.toLocaleString()} pgs</td>
                   <td class="text-xs">
-                    <span class="badge" style="background: ${dayColorPct > 0 ? 'rgba(124, 58, 237, 0.12)' : 'var(--bg-surface-subtle)'}; font-size: 0.75rem;">
-                      ${dayColorPct}% Color
+                    <span class="badge" style="background: ${j.colorMode === 'color' ? 'rgba(124, 58, 237, 0.12)' : 'var(--bg-surface-subtle)'};">
+                      ${j.colorMode === 'color' ? 'Color' : 'B&W'} &bull; ${j.duplex ? '2-Sided' : '1-Sided'}
                     </span>
                   </td>
-                  <td class="text-xs">
-                    <span class="badge" style="background: ${dayDuplexPct > 0 ? 'rgba(16, 185, 129, 0.12)' : 'var(--bg-surface-subtle)'}; font-size: 0.75rem;">
-                      ${dayDuplexPct}% Duplex
+                  <td class="text-xs font-semibold">${escapeHtml(j.paperSize || 'A4')}</td>
+                  <td class="text-sm">${j.copies || 1} &times; ${j.pageCount || 1} pgs</td>
+                  <td class="text-sm font-semibold">${formatCurrencyINR(quotedAmount)}</td>
+                  <td class="text-sm font-bold" style="color: ${paidAmount > 0 ? '#059669' : 'var(--text-muted)'};">
+                    ${formatCurrencyINR(paidAmount)}
+                  </td>
+                  <td>
+                    <span class="badge ${isPaid ? 'badge-completed' : 'badge-under-review'}" style="font-size: 0.7rem;">
+                      ${isPaid ? 'Paid' : 'Unpaid'}
                     </span>
                   </td>
                   <td>
-                    <span class="badge" style="background: ${daySuccessPct >= 80 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.12)'}; color: ${daySuccessPct >= 80 ? '#059669' : '#dc2626'}; font-size: 0.75rem;">
-                      ${daySuccessPct}%
+                    <span class="badge ${isCompleted ? 'badge-completed' : j.status === 'rejected' ? 'badge-rejected' : 'badge-submitted'}" style="font-size: 0.7rem;">
+                      ${escapeHtml(j.status)}
                     </span>
-                  </td>
-                  <td class="font-bold text-sm" style="color: var(--primary-700);">
-                    ${formatCurrencyINR(d.revenue)}
                   </td>
                 </tr>
               `;
-            }).join('')}
+            }).join('') : `
+              <tr>
+                <td colspan="9" class="text-center text-muted" style="padding: 2rem;">No matching orders found for current search/filter.</td>
+              </tr>
+            `}
           </tbody>
           <tfoot>
             <tr style="background: var(--bg-surface-subtle); font-weight: 700;">
               <td>Total Summary</td>
-              <td>${completedJobs.length} / ${filteredJobs.length} Orders</td>
-              <td>${totalPages.toLocaleString()} pgs</td>
-              <td>${colorPercent}% Color</td>
-              <td>${duplexPercent}% Duplex</td>
-              <td>${completionRate}% Overall</td>
+              <td>${completedJobs.length} Completed / ${filteredJobs.length} Orders</td>
+              <td>${colorPercent}% Color &bull; ${duplexPercent}% Duplex</td>
+              <td>${paperSizesList[0]?.size || 'A4'} Top Media</td>
+              <td>${totalPages.toLocaleString()} Billable Pgs</td>
+              <td>${formatCurrencyINR(grossPotentialRevenue)}</td>
               <td style="color: var(--primary-700);">${formatCurrencyINR(totalRevenue)}</td>
+              <td>${completionRate}% Overall</td>
+              <td>${rejectedJobs.length} Rejected</td>
             </tr>
           </tfoot>
         </table>
       </div>
+
+      <!-- Pagination Bar -->
+      <div class="table-pagination-bar">
+        <span class="text-xs text-muted" id="analytics-page-indicator">
+          Showing ${tableFiltered.length > 0 ? pageStart + 1 : 0} to ${Math.min(pageStart + PAGE_SIZE, tableFiltered.length)} of ${tableFiltered.length} records
+        </span>
+        <div class="flex items-center gap-2">
+          <button type="button" class="btn btn-secondary btn-sm btn-table-prev" id="btn-analytics-prev" ${currentAnalyticsTablePage <= 1 ? 'disabled' : ''}>
+            &larr; Previous
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm btn-table-next" id="btn-analytics-next" ${currentAnalyticsTablePage >= totalPagesCount ? 'disabled' : ''}>
+            Next &rarr;
+          </button>
+        </div>
+      </div>
     </div>
   `;
+
+  // Attach interactive controls inside the analytics view
+  // 1. Metric switcher for Color vs Monochrome
+  container.querySelectorAll('.metric-switch-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentAnalyticsPrintTypeMetric = btn.getAttribute('data-metric') || 'jobs';
+      renderAnalyticsSection(centerId);
+    });
+  });
+
+  // 2. Table search input
+  const searchInput = container.querySelector('#analytics-table-search-input');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      currentAnalyticsTableSearch = e.target.value;
+      currentAnalyticsTablePage = 1;
+      renderAnalyticsSection(centerId);
+      // Restore focus to input
+      const nextInput = document.getElementById('analytics-table-search-input');
+      if (nextInput) {
+        nextInput.focus();
+        nextInput.selectionStart = nextInput.selectionEnd = nextInput.value.length;
+      }
+    });
+  }
+
+  // 3. Table status filter dropdown
+  const statusSelect = container.querySelector('#analytics-table-status-select');
+  if (statusSelect) {
+    statusSelect.addEventListener('change', (e) => {
+      currentAnalyticsTableStatus = e.target.value;
+      currentAnalyticsTablePage = 1;
+      renderAnalyticsSection(centerId);
+    });
+  }
+
+  // 4. Pagination buttons
+  container.querySelector('#btn-analytics-prev')?.addEventListener('click', () => {
+    if (currentAnalyticsTablePage > 1) {
+      currentAnalyticsTablePage--;
+      renderAnalyticsSection(centerId);
+    }
+  });
+
+  container.querySelector('#btn-analytics-next')?.addEventListener('click', () => {
+    if (currentAnalyticsTablePage < totalPagesCount) {
+      currentAnalyticsTablePage++;
+      renderAnalyticsSection(centerId);
+    }
+  });
 }
 
 
