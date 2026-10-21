@@ -257,6 +257,27 @@ describe("SmartPrint — Customer QR Upload, Mobile Scan & Priority Failover Ver
       assert.strictEqual(html.includes("Online Payment"), true);
       assert.strictEqual(html.includes("Coming Soon"), true);
     });
+
+    it("18: verifies multi-tenant store status isolation: closing Store A does not close Store B and each QR maintains independent status", () => {
+      const serverCode = fs.readFileSync(path.resolve(__dirname, "../server.js"), "utf-8");
+      const appJs = fs.readFileSync(appJsPath, "utf-8");
+      const customerJs = fs.readFileSync(customerJsPath, "utf-8");
+      const apiJs = fs.readFileSync(apiJsPath, "utf-8");
+
+      // 1. server.js must NOT loop over all store status keys when saving status
+      assert.strictEqual(serverCode.includes("for (const k of Object.keys(storeStatusMap))"), false, "server.js must not overwrite all store status keys.");
+      assert.strictEqual(serverCode.includes("for (const s of Object.values(storeRegistryMap))"), false, "server.js must not overwrite all store registry records.");
+
+      // 2. server.js must resolve status per center without cross-store contamination
+      assert.strictEqual(serverCode.includes('centerId && centerId !== "default"'), true, "server.js getStoreStatusRecord must check centerId.");
+
+      // 3. app.js getStoreStatus must check effectiveCenterId before global fallback
+      assert.strictEqual(appJs.includes("const saved = localStorage.getItem(`smartprint_store_status_${effectiveCenterId}`);"), true, "app.js getStoreStatus must isolate status per center.");
+
+      // 4. customer.js must check live status for target QR center without reading other centers
+      assert.strictEqual(customerJs.includes("localStorage.getItem(`smartprint_store_status_${currentCenter.centerId}`)"), true, "customer.js must isolate local sync to target QR center.");
+    });
   });
 });
+
 

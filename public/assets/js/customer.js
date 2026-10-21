@@ -292,24 +292,45 @@ let lastDetectedIsOpen = null;
 function startLiveStoreStatusWatcher(centerQuery) {
   async function checkLiveStatus() {
     try {
-      // 0. Instant sync from localStorage if in same browser
-      const localSaved = localStorage.getItem('smartprint_store_status');
-      if (localSaved === 'closed' || localSaved === 'open') {
-        const localIsOpen = localSaved === 'open';
-        if (currentCenter && currentCenter.isOpen !== localIsOpen) {
-          currentCenter.isOpen = localIsOpen;
-          currentCenter.status = localIsOpen ? 'active' : 'closed';
-          populateCenterInfo(currentCenter);
-          if (localIsOpen) {
-            showToast("🟢 Store has opened! Upload & printing options are now available.", "success");
-          } else {
-            showToast("🔴 Store has closed. New order submissions are currently paused.", "info");
+      // 0. Instant sync from localStorage if in same browser - ONLY for this center
+      const targetId = currentCenter?.publicId || currentCenter?.centerId || centerQuery;
+      if (targetId && targetId !== 'default') {
+        const localSaved = (currentCenter?.centerId && localStorage.getItem(`smartprint_store_status_${currentCenter.centerId}`)) ||
+                           (currentCenter?.publicId && localStorage.getItem(`smartprint_store_status_${currentCenter.publicId}`)) ||
+                           localStorage.getItem(`smartprint_store_status_${targetId}`);
+        if (localSaved === 'closed' || localSaved === 'open') {
+          const localIsOpen = localSaved === 'open';
+          if (currentCenter && currentCenter.isOpen !== localIsOpen) {
+            currentCenter.isOpen = localIsOpen;
+            currentCenter.status = localIsOpen ? 'active' : 'closed';
+            populateCenterInfo(currentCenter);
+            if (localIsOpen) {
+              showToast("🟢 Store has opened! Upload & printing options are now available.", "success");
+            } else {
+              showToast("🔴 Store has closed. New order submissions are currently paused.", "info");
+            }
+          }
+        }
+      } else if (!targetId || targetId === 'default') {
+        const localSaved = localStorage.getItem('smartprint_store_status_default') || localStorage.getItem('smartprint_store_status');
+        if (localSaved === 'closed' || localSaved === 'open') {
+          const localIsOpen = localSaved === 'open';
+          if (currentCenter && currentCenter.isOpen !== localIsOpen) {
+            currentCenter.isOpen = localIsOpen;
+            currentCenter.status = localIsOpen ? 'active' : 'closed';
+            populateCenterInfo(currentCenter);
+            if (localIsOpen) {
+              showToast("🟢 Store has opened! Upload & printing options are now available.", "success");
+            } else {
+              showToast("🔴 Store has closed. New order submissions are currently paused.", "info");
+            }
           }
         }
       }
 
-      // 1. Authoritative check via API endpoint
-      const res = await fetch(`/api/store/status?center=${encodeURIComponent(centerQuery || '')}`, { cache: 'no-cache' });
+      // 1. Authoritative check via API endpoint for this specific center
+      const targetQuery = currentCenter?.publicId || currentCenter?.centerId || centerQuery || '';
+      const res = await fetch(`/api/store/status?center=${encodeURIComponent(targetQuery)}`, { cache: 'no-cache' });
       if (res.ok) {
         const data = await res.json();
         if (data && typeof data.isOpen === 'boolean') {
@@ -332,9 +353,21 @@ function startLiveStoreStatusWatcher(centerQuery) {
     }
   }
 
-  // 1. Instant 0ms Cross-tab / same-browser synchronization via storage event
+  // 1. Instant 0ms Cross-tab / same-browser synchronization via storage event - ONLY for this center
   window.addEventListener('storage', (e) => {
-    if (e.key === 'smartprint_store_status' || (e.key && e.key.startsWith('smartprint_store_status_'))) {
+    if (!e.key || !currentCenter) return;
+    const centerKeys = [
+      currentCenter.centerId ? `smartprint_store_status_${currentCenter.centerId}` : null,
+      currentCenter.publicId ? `smartprint_store_status_${currentCenter.publicId}` : null,
+      currentCenter.uniqueId ? `smartprint_store_status_${currentCenter.uniqueId}` : null,
+      centerQuery ? `smartprint_store_status_${centerQuery}` : null
+    ].filter(Boolean);
+
+    if (!centerQuery || centerQuery === 'default') {
+      centerKeys.push('smartprint_store_status_default', 'smartprint_store_status');
+    }
+
+    if (centerKeys.includes(e.key)) {
       const nextIsOpen = e.newValue === 'open';
       if (currentCenter && currentCenter.isOpen !== nextIsOpen) {
         lastDetectedIsOpen = nextIsOpen;

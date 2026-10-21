@@ -78,7 +78,8 @@ export const api = {
 
     const localSavedStatus = (center.centerId && localStorage.getItem(`smartprint_store_status_${center.centerId}`)) ||
                              (center.publicId && localStorage.getItem(`smartprint_store_status_${center.publicId}`)) ||
-                             localStorage.getItem('smartprint_store_status');
+                             (center.uniqueId && localStorage.getItem(`smartprint_store_status_${center.uniqueId}`)) ||
+                             ((!publicOrCenterId || publicOrCenterId === 'default') ? localStorage.getItem('smartprint_store_status') : null);
     if (localSavedStatus === 'closed') {
       status = 'closed';
       isOpen = false;

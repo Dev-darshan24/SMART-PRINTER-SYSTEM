@@ -294,21 +294,28 @@ export function updateStoreStatusUI(isOpen) {
 }
 
 export function getStoreStatus(centerId = null) {
-  // Global status is canonical across all pages on this domain
+  const user = auth?.getCurrentUser?.();
+  const effectiveCenterId = centerId || user?.centerId;
+
+  if (effectiveCenterId) {
+    const saved = localStorage.getItem(`smartprint_store_status_${effectiveCenterId}`);
+    if (saved === 'closed') return false;
+    if (saved === 'open') return true;
+
+    const center = stateStore.getCenter(effectiveCenterId);
+    if (center && (center.status === 'closed' || center.status === 'inactive' || center.isOpen === false)) {
+      return false;
+    }
+    if (center && (center.status === 'active' || center.isOpen === true)) {
+      return true;
+    }
+  }
+
+  // Fallback only if no specific center is configured
   const globalSaved = localStorage.getItem('smartprint_store_status');
   if (globalSaved === 'closed') return false;
   if (globalSaved === 'open') return true;
 
-  if (centerId) {
-    const saved = localStorage.getItem(`smartprint_store_status_${centerId}`);
-    if (saved === 'closed') return false;
-    if (saved === 'open') return true;
-
-    const center = stateStore.getCenter(centerId);
-    if (center && (center.status === 'closed' || center.status === 'inactive' || center.isOpen === false)) {
-      return false;
-    }
-  }
   return true; // Default is open
 }
 
@@ -319,14 +326,23 @@ export async function setStoreStatus(isOpen, centerId = null, showNotification =
   // 1. Update UI immediately
   updateStoreStatusUI(isOpen);
 
-  // 2. Persist in localStorage under BOTH global and center-specific keys
-  localStorage.setItem('smartprint_store_status', isOpen ? 'open' : 'closed');
+  // 2. Persist in localStorage under center-specific keys
+  const centerObj = effectiveCenterId ? (stateStore.getCenter(effectiveCenterId) || {}) : {};
   if (effectiveCenterId) {
     localStorage.setItem(`smartprint_store_status_${effectiveCenterId}`, isOpen ? 'open' : 'closed');
   }
+  if (centerObj.publicId && centerObj.publicId !== effectiveCenterId) {
+    localStorage.setItem(`smartprint_store_status_${centerObj.publicId}`, isOpen ? 'open' : 'closed');
+  }
+  if (centerObj.uniqueId) {
+    localStorage.setItem(`smartprint_store_status_${centerObj.uniqueId}`, isOpen ? 'open' : 'closed');
+  }
+  // Only update global default key if this is the default center or unassigned
+  if (!effectiveCenterId || effectiveCenterId === 'center_default' || centerObj.publicId === 'CTR-100000') {
+    localStorage.setItem('smartprint_store_status', isOpen ? 'open' : 'closed');
+  }
 
-  // 3. Persist in stateStore
-  const centerObj = effectiveCenterId ? (stateStore.getCenter(effectiveCenterId) || {}) : {};
+  // 3. Persist in stateStore for this specific center
   if (effectiveCenterId) {
     stateStore.saveCenter({
       ...centerObj,
@@ -336,7 +352,7 @@ export async function setStoreStatus(isOpen, centerId = null, showNotification =
     });
   }
 
-  // 4. Send to server with multiple identifiers so any URL/QR query matches
+  // 4. Send to server for this specific center only
   try {
     await fetch('/api/store/status', {
       method: 'POST',
@@ -353,8 +369,8 @@ export async function setStoreStatus(isOpen, centerId = null, showNotification =
     console.warn("Could not sync store status to server:", err.message);
   }
 
-  // 5. Notify reactive subscribers
-  stateStore.notify('store_status', { isOpen, status: isOpen ? 'active' : 'closed' });
+  // 5. Notify reactive subscribers with center ID
+  stateStore.notify('store_status', { centerId: effectiveCenterId, isOpen, status: isOpen ? 'active' : 'closed' });
 
   // 6. Persist in Firestore if online
   if (effectiveCenterId && db) {
@@ -389,37 +405,52 @@ export function initStoreStatusToggle(centerId = null) {
   const initialOpen = getStoreStatus(effectiveCenterId);
   updateStoreStatusUI(initialOpen);
 
-  // Cross-page and Cross-tab instant synchronization via storage event
+  const centerObj = effectiveCenterId ? (stateStore.getCenter(effectiveCenterId) || {}) : {};
+  const matchingKeys = new Set([
+    effectiveCenterId ? `smartprint_store_status_${effectiveCenterId}` : null,
+    centerObj.publicId ? `smartprint_store_status_${centerObj.publicId}` : null,
+    centerObj.uniqueId ? `smartprint_store_status_${centerObj.uniqueId}` : null
+  ].filter(Boolean));
+
+  if (!effectiveCenterId || effectiveCenterId === 'center_default' || centerObj.publicId === 'CTR-100000') {
+    matchingKeys.add('smartprint_store_status');
+  }
+
+  // Cross-page and Cross-tab instant synchronization via storage event - ONLY for this center
   if (!window.__storeStatusStorageListenerAttached) {
     window.__storeStatusStorageListenerAttached = true;
     window.addEventListener('storage', (e) => {
-      if (e.key === 'smartprint_store_status' || (e.key && e.key.startsWith('smartprint_store_status_'))) {
+      if (matchingKeys.has(e.key)) {
         const nextOpen = e.newValue === 'open';
         updateStoreStatusUI(nextOpen);
       }
     });
   }
 
-  // Subscribe to reactive stateStore events for in-app page changes
+  // Subscribe to reactive stateStore events for in-app page changes - ONLY for this center
   stateStore.subscribe((event, data) => {
     if (event === 'store_status' && data && typeof data.isOpen === 'boolean') {
-      updateStoreStatusUI(data.isOpen);
+      if (!data.centerId || data.centerId === effectiveCenterId || (centerObj.publicId && data.centerId === centerObj.publicId)) {
+        updateStoreStatusUI(data.isOpen);
+      }
     }
   });
 
   // Asynchronously query server for authoritative store status in case changed elsewhere
-  fetch(`/api/store/status?center=${encodeURIComponent(effectiveCenterId || '')}`, { cache: 'no-cache' })
-    .then(r => r.json())
-    .then(data => {
-      if (data && typeof data.isOpen === 'boolean') {
-        updateStoreStatusUI(data.isOpen);
-        localStorage.setItem('smartprint_store_status', data.isOpen ? 'open' : 'closed');
-        if (effectiveCenterId) {
+  if (effectiveCenterId) {
+    fetch(`/api/store/status?center=${encodeURIComponent(effectiveCenterId || '')}`, { cache: 'no-cache' })
+      .then(r => r.json())
+      .then(data => {
+        if (data && typeof data.isOpen === 'boolean') {
+          updateStoreStatusUI(data.isOpen);
           localStorage.setItem(`smartprint_store_status_${effectiveCenterId}`, data.isOpen ? 'open' : 'closed');
+          if (centerObj.publicId) {
+            localStorage.setItem(`smartprint_store_status_${centerObj.publicId}`, data.isOpen ? 'open' : 'closed');
+          }
         }
-      }
-    })
-    .catch(() => {});
+      })
+      .catch(() => {});
+  }
 
   if (!storeStatusBtn.__boundClick) {
     storeStatusBtn.__boundClick = true;

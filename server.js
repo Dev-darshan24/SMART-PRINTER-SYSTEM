@@ -281,7 +281,7 @@ if (!storeRegistryMap["default"] && Object.keys(storeRegistryMap).length === 0) 
 }
 
 function getStoreStatusRecord(centerId) {
-  if (centerId) {
+  if (centerId && centerId !== "default" && centerId !== "_default" && centerId !== "all") {
     const cleanId = String(centerId).trim().toLowerCase();
     const key = Object.keys(storeStatusMap).find(k => k.toLowerCase() === cleanId);
     if (key && storeStatusMap[key]) return storeStatusMap[key];
@@ -291,21 +291,37 @@ function getStoreStatusRecord(centerId) {
       (c.centerId && c.centerId.toLowerCase() === cleanId) ||
       (c.publicId && c.publicId.toLowerCase() === cleanId) ||
       (c.uniqueId && String(c.uniqueId).toLowerCase() === cleanId) ||
-      (c.storeName && c.storeName.toLowerCase() === cleanId)
+      (c.storeName && c.storeName.toLowerCase() === cleanId) ||
+      (c.name && c.name.toLowerCase() === cleanId)
     );
     if (regStore) {
-      if (storeStatusMap[regStore.centerId]) return storeStatusMap[regStore.centerId];
-      if (storeStatusMap[regStore.publicId]) return storeStatusMap[regStore.publicId];
-      if (storeStatusMap[regStore.uniqueId]) return storeStatusMap[regStore.uniqueId];
+      if (regStore.publicId && storeStatusMap[regStore.publicId]) return storeStatusMap[regStore.publicId];
+      if (regStore.centerId && storeStatusMap[regStore.centerId]) return storeStatusMap[regStore.centerId];
+      if (regStore.uniqueId && storeStatusMap[String(regStore.uniqueId)]) return storeStatusMap[String(regStore.uniqueId)];
+      if (typeof regStore.isOpen === 'boolean') {
+        return {
+          isOpen: regStore.isOpen,
+          status: regStore.status || (regStore.isOpen ? "active" : "closed"),
+          updatedAt: regStore.updatedAt || new Date().toISOString()
+        };
+      }
     }
+
+    // A specific center was queried that is not recorded yet: return default open for this center
+    return { isOpen: true, status: "active", updatedAt: new Date().toISOString() };
   }
 
-  // Canonical fallback for all pages and single-store deployments
+  // Fallback for default / unassigned query only
   if (storeStatusMap["_default"]) return storeStatusMap["_default"];
   if (storeStatusMap["default"]) return storeStatusMap["default"];
-  if (storeStatusMap["all"]) return storeStatusMap["all"];
-  const firstVal = Object.values(storeStatusMap)[0];
-  if (firstVal && typeof firstVal.isOpen === 'boolean') return firstVal;
+  const defaultStore = storeRegistryMap["default"] || storeRegistryMap["center_default"];
+  if (defaultStore && typeof defaultStore.isOpen === 'boolean') {
+    return {
+      isOpen: defaultStore.isOpen,
+      status: defaultStore.status || (defaultStore.isOpen ? "active" : "closed"),
+      updatedAt: defaultStore.updatedAt || new Date().toISOString()
+    };
+  }
 
   return { isOpen: true, status: "active", updatedAt: new Date().toISOString() };
 }
@@ -313,7 +329,7 @@ function getStoreStatusRecord(centerId) {
 function getStoreRecord(centerQuery) {
   const query = (centerQuery || "").trim().toLowerCase();
   let found = null;
-  if (query) {
+  if (query && query !== "default" && query !== "_default") {
     const key = Object.keys(storeRegistryMap).find(k => k.toLowerCase() === query);
     if (key) found = storeRegistryMap[key];
 
@@ -328,9 +344,9 @@ function getStoreRecord(centerQuery) {
     }
   }
 
-  // Fallback if query is default, empty, or single store setup
-  if (!found && (!query || query === 'default' || Object.keys(storeRegistryMap).length <= 4)) {
-    found = storeRegistryMap["default"] || Object.values(storeRegistryMap)[0] || null;
+  // Fallback only if query is empty or explicitly 'default'
+  if (!found && (!query || query === 'default' || query === '_default')) {
+    found = storeRegistryMap["default"] || storeRegistryMap["center_default"] || null;
   }
 
   if (found) {
@@ -364,8 +380,12 @@ function saveStoreRecord(centerData) {
 
   storeRegistryMap[record.centerId] = record;
   storeRegistryMap[record.publicId] = record;
-  storeRegistryMap[record.uniqueId] = record;
-  storeRegistryMap["default"] = record;
+  if (!storeRegistryMap[record.uniqueId] || storeRegistryMap[record.uniqueId].centerId === record.centerId) {
+    storeRegistryMap[record.uniqueId] = record;
+  }
+  if (!storeRegistryMap["default"] || record.centerId === "center_default" || record.publicId === "CTR-100000") {
+    storeRegistryMap["default"] = record;
+  }
 
   try {
     fs.writeFileSync(STORE_REGISTRY_FILE, JSON.stringify(storeRegistryMap, null, 2), "utf-8");
@@ -384,40 +404,45 @@ function saveStoreStatusRecord(centerId, isOpen, status) {
     updatedAt: new Date().toISOString()
   };
 
-  // 1. Update every existing key in storeStatusMap so no center or alias is left stale
-  for (const k of Object.keys(storeStatusMap)) {
-    storeStatusMap[k] = { ...record };
-  }
-
-  // 2. Always update global default keys for complete cross-page consistency
-  storeStatusMap["_default"] = record;
-  storeStatusMap["default"] = record;
-  storeStatusMap["all"] = record;
-
-  if (centerId) {
-    const cleanId = String(centerId).trim();
+  const cleanId = centerId ? String(centerId).trim() : "";
+  if (cleanId) {
     storeStatusMap[cleanId] = record;
     storeStatusMap[cleanId.toLowerCase()] = record;
 
-    // Also link aliases from store registry
+    // Link aliases from store registry for THIS store only
     const regStore = Object.values(storeRegistryMap).find(c => 
       (c.centerId && c.centerId.toLowerCase() === cleanId.toLowerCase()) ||
       (c.publicId && c.publicId.toLowerCase() === cleanId.toLowerCase()) ||
       (c.uniqueId && String(c.uniqueId).toLowerCase() === cleanId.toLowerCase())
     );
     if (regStore) {
-      if (regStore.centerId) storeStatusMap[regStore.centerId] = record;
-      if (regStore.publicId) storeStatusMap[regStore.publicId] = record;
-      if (regStore.uniqueId) storeStatusMap[regStore.uniqueId] = record;
+      if (regStore.centerId) {
+        storeStatusMap[regStore.centerId] = record;
+        storeStatusMap[regStore.centerId.toLowerCase()] = record;
+      }
+      if (regStore.publicId) {
+        storeStatusMap[regStore.publicId] = record;
+        storeStatusMap[regStore.publicId.toLowerCase()] = record;
+      }
+      if (regStore.uniqueId) {
+        storeStatusMap[String(regStore.uniqueId)] = record;
+      }
       regStore.isOpen = record.isOpen;
       regStore.status = record.status;
-    }
-  }
+      regStore.updatedAt = record.updatedAt;
 
-  // Ensure every store record in registry reflects this status
-  for (const s of Object.values(storeRegistryMap)) {
-    s.isOpen = record.isOpen;
-    s.status = record.status;
+      // Only if this specific store is the default center, update default keys
+      if (regStore.centerId === "center_default" || regStore.publicId === "CTR-100000" || cleanId.toLowerCase() === "default") {
+        storeStatusMap["default"] = record;
+        storeStatusMap["_default"] = record;
+      }
+    } else if (cleanId.toLowerCase() === "default" || cleanId.toLowerCase() === "_default") {
+      storeStatusMap["default"] = record;
+      storeStatusMap["_default"] = record;
+    }
+  } else {
+    storeStatusMap["_default"] = record;
+    storeStatusMap["default"] = record;
   }
 
   try {
