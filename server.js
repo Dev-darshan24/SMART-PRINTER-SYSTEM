@@ -343,6 +343,51 @@ try {
   storeRegistryMap = {};
 }
 
+// In-memory and file-persisted store jobs repository (without storing raw customer files)
+const STORE_JOBS_FILE = path.join(__dirname, "store_jobs.json");
+let storeJobsList = [];
+try {
+  if (fs.existsSync(STORE_JOBS_FILE)) {
+    storeJobsList = JSON.parse(fs.readFileSync(STORE_JOBS_FILE, "utf-8"));
+    if (!Array.isArray(storeJobsList)) storeJobsList = [];
+  }
+} catch (e) {
+  storeJobsList = [];
+}
+
+function saveStoreJobsFile() {
+  try {
+    fs.writeFileSync(STORE_JOBS_FILE, JSON.stringify(storeJobsList, null, 2), "utf-8");
+  } catch (err) {
+    console.warn("Could not save store_jobs.json:", err.message);
+  }
+}
+
+function getJobsForCenter(centerId) {
+  if (!centerId) return [];
+  const cleanId = String(centerId).trim().toLowerCase();
+
+  // Find all alias IDs for this store from storeRegistryMap
+  const targetIds = new Set([cleanId]);
+  const regStore = Object.values(storeRegistryMap).find(c =>
+    (c.centerId && c.centerId.toLowerCase() === cleanId) ||
+    (c.publicId && c.publicId.toLowerCase() === cleanId) ||
+    (c.uniqueId && String(c.uniqueId).toLowerCase() === cleanId)
+  );
+
+  if (regStore) {
+    if (regStore.centerId) targetIds.add(regStore.centerId.toLowerCase());
+    if (regStore.publicId) targetIds.add(regStore.publicId.toLowerCase());
+    if (regStore.uniqueId) targetIds.add(String(regStore.uniqueId).toLowerCase());
+  }
+
+  // Filter jobs strictly matching this store's identifiers (Store 1 only sees Store 1)
+  return storeJobsList.filter(job => {
+    if (!job.centerId) return false;
+    return targetIds.has(String(job.centerId).trim().toLowerCase());
+  });
+}
+
 // Default store initialization if registry is empty (default starts CLOSED)
 if (!storeRegistryMap["default"] && Object.keys(storeRegistryMap).length === 0) {
   const defaultStore = {
@@ -972,6 +1017,132 @@ const server = http.createServer((req, res) => {
       });
       return;
     }
+  }
+
+  // Dynamic API endpoint: Store-isolated Customer Jobs & History (Metadata only - files are never stored)
+  if (pathname === "/api/jobs") {
+    if (req.method === "GET") {
+      const centerQuery = parsedUrl.searchParams.get("center") || "";
+      const jobs = getJobsForCenter(centerQuery);
+      res.writeHead(200, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Access-Control-Allow-Origin": "*",
+        "Cache-Control": "no-cache, no-store, must-revalidate"
+      });
+      res.end(JSON.stringify({ success: true, count: jobs.length, jobs }));
+      return;
+    }
+
+    if (req.method === "POST") {
+      let bodyData = "";
+      req.on("data", chunk => {
+        bodyData += chunk;
+        if (bodyData.length > 2e6) req.destroy();
+      });
+      req.on("end", () => {
+        try {
+          const body = JSON.parse(bodyData || "{}");
+          if (!body.centerId) {
+            res.writeHead(400, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+            res.end(JSON.stringify({ success: false, error: "centerId is required" }));
+            return;
+          }
+
+          // Random customer ID generation: e.g. CUST-682941
+          const randomCustNum = Math.floor(100000 + Math.random() * 900000);
+          const customerId = body.customerId || `CUST-${randomCustNum}`;
+
+          // File privacy: Ensure NO file binary, base64 dataUrl, or raw file blob is saved
+          delete body.dataUrl;
+          delete body.fileData;
+          delete body.rawFile;
+
+          const newJob = {
+            jobId: body.jobId || `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            customerId: customerId,
+            centerId: body.centerId,
+            trackingToken: body.trackingToken || `XP-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}`,
+            createdAt: body.createdAt || new Date().toISOString(),
+            submittedAt: body.submittedAt || body.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            pageCount: Number(body.pageCount) || 1,
+            copies: Number(body.copies) || 1,
+            estimatedAmount: Number(body.estimatedAmount) || 0,
+            paidAmount: Number(body.paidAmount != null ? body.paidAmount : body.estimatedAmount) || 0,
+            amountPaise: Number(body.amountPaise) || Math.round((Number(body.paidAmount != null ? body.paidAmount : body.estimatedAmount) || 0) * 100),
+            originalFileName: body.originalFileName || "Document",
+            fileCount: Number(body.fileCount) || 1,
+            files: (body.files || []).map(f => ({
+              name: f.name || "Document",
+              size: f.size || 0,
+              type: f.type || "application/pdf",
+              estimatedPages: f.estimatedPages || 1,
+              isCameraScan: !!f.isCameraScan
+            })),
+            storagePath: null, // Files are NEVER stored in database or storage
+            paperSize: body.paperSize || "A4",
+            colorMode: body.colorMode || "monochrome",
+            duplex: !!body.duplex,
+            paymentMethod: body.paymentMethod || "cash",
+            paymentStatus: body.paymentStatus || "pending",
+            status: body.status || "pending_confirmation",
+            customerNote: body.customerNote ? String(body.customerNote).substring(0, 200) : "",
+            routedPrinter: body.routedPrinter || null
+          };
+
+          // Tenant isolation: Save job into storeJobsList
+          storeJobsList.unshift(newJob);
+          saveStoreJobsFile();
+
+          res.writeHead(200, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "no-cache"
+          });
+          res.end(JSON.stringify({ success: true, job: newJob }));
+        } catch (err) {
+          res.writeHead(400, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+          res.end(JSON.stringify({ success: false, error: err.message }));
+        }
+      });
+      return;
+    }
+  }
+
+  // Dynamic API endpoint: Update Job Status (Order progression by Center Owner)
+  if (pathname === "/api/jobs/update-status" && req.method === "POST") {
+    let bodyData = "";
+    req.on("data", chunk => {
+      bodyData += chunk;
+      if (bodyData.length > 1e5) req.destroy();
+    });
+    req.on("end", () => {
+      try {
+        const body = JSON.parse(bodyData || "{}");
+        const { jobId, status, centerId, routedPrinter } = body;
+        const job = storeJobsList.find(j => j.jobId === jobId);
+        if (!job) {
+          res.writeHead(404, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+          res.end(JSON.stringify({ success: false, error: "Job not found" }));
+          return;
+        }
+
+        if (status) job.status = status;
+        if (status === "completed") job.completedAt = new Date().toISOString();
+        if (status === "payment_confirmed") job.paymentStatus = "paid";
+        if (routedPrinter) job.routedPrinter = routedPrinter;
+        job.updatedAt = new Date().toISOString();
+
+        saveStoreJobsFile();
+
+        res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+        res.end(JSON.stringify({ success: true, job }));
+      } catch (err) {
+        res.writeHead(400, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
   }
 
   // Dynamic API endpoint: Real connected external printers on this device

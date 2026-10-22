@@ -155,7 +155,8 @@ describe("SmartPrint — Customer QR Upload, Mobile Scan & Priority Failover Ver
 
     it("3: verifies a Store A order cannot appear in Store B's queue (tenant isolation)", () => {
       const stateJs = fs.readFileSync(path.resolve(__dirname, "../public/assets/js/state.js"), "utf-8");
-      assert.strictEqual(stateJs.includes("if (centerId) {\n      return filtered.filter(j => j.centerId === centerId);\n    }"), true);
+      const hasTenantIsolation = stateJs.includes("allowedIds.has(String(j.centerId).trim().toLowerCase())") || stateJs.includes("j.centerId === centerId");
+      assert.strictEqual(hasTenantIsolation, true, "state.js must enforce strict tenant isolation filtering in getJobs.");
     });
 
     it("4: verifies a Store B printer or owner cannot claim or print a Store A job", () => {

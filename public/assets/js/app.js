@@ -2511,6 +2511,29 @@ function renderQueue(centerId) {
   const jobsTableBody = document.getElementById('queue-table-body');
   if (!jobsTableBody) return;
 
+  // Background fetch to sync any new customer QR orders for this store
+  if (centerId && !window.__queueFetching) {
+    window.__queueFetching = true;
+    fetch(`/api/jobs?center=${encodeURIComponent(centerId)}`, { cache: 'no-cache' })
+      .then(r => r.json())
+      .then(data => {
+        window.__queueFetching = false;
+        if (data && Array.isArray(data.jobs) && data.jobs.length > 0) {
+          let updated = false;
+          data.jobs.forEach(remoteJob => {
+            if (!stateStore.getJob(remoteJob.jobId)) {
+              stateStore.saveJob(remoteJob);
+              updated = true;
+            }
+          });
+          if (updated) {
+            renderQueue(centerId);
+          }
+        }
+      })
+      .catch(() => { window.__queueFetching = false; });
+  }
+
   const searchQuery = (document.getElementById('search-queue-input')?.value || '').toLowerCase().trim();
 
   let jobs = stateStore.getJobs(centerId);
@@ -2529,8 +2552,9 @@ function renderQueue(centerId) {
 
   if (searchQuery) {
     jobs = jobs.filter(j => 
-      j.originalFileName.toLowerCase().includes(searchQuery) || 
-      j.trackingToken.toLowerCase().includes(searchQuery)
+      (j.originalFileName || '').toLowerCase().includes(searchQuery) || 
+      (j.trackingToken || '').toLowerCase().includes(searchQuery) ||
+      (j.customerId || '').toLowerCase().includes(searchQuery)
     );
   }
 
@@ -2565,12 +2589,18 @@ function renderQueue(centerId) {
   jobsTableBody.innerHTML = displayJobs.map(job => `
     <tr id="job-row-${job.jobId}">
       <td>
-        <div class="font-medium text-main">${escapeHtml(job.originalFileName)}</div>
-        <div class="text-xs text-muted flex items-center gap-1 flex-wrap">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="badge" style="font-family: monospace; font-size: 0.7rem; background: var(--primary-50); color: var(--primary-700); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--primary-200);">
+            ${escapeHtml(job.customerId || ('CUST-' + (job.jobId ? job.jobId.slice(-6).toUpperCase() : '100001')))}
+          </span>
+          <span class="font-medium text-main">${escapeHtml(job.originalFileName)}</span>
+        </div>
+        <div class="text-xs text-muted flex items-center gap-1 flex-wrap" style="margin-top: 2px;">
           ${job.fileCount > 1 ? `<span class="badge badge-submitted text-xs" style="font-size:0.65rem; padding: 1px 4px;">${job.fileCount} Materials</span> &bull;` : ''}
           <span>${formatBytes(job.fileSizeBytes)}</span> &bull; 
           <span>${job.pageCount} pgs</span> &bull; 
-          <span>${job.copies} ${job.copies > 1 ? 'copies' : 'copy'}</span>
+          <span>${job.copies} ${job.copies > 1 ? 'copies' : 'copy'}</span> &bull;
+          <span style="font-size: 0.7rem;">Not stored (transient print)</span>
         </div>
       </td>
       <td>
@@ -2682,9 +2712,32 @@ function renderHistory(centerId) {
   const tbody = document.getElementById('history-table-body');
   if (!tbody) return;
 
+  // Background fetch to sync any new customer QR orders for this store
+  if (centerId && !window.__historyFetching) {
+    window.__historyFetching = true;
+    fetch(`/api/jobs?center=${encodeURIComponent(centerId)}`, { cache: 'no-cache' })
+      .then(r => r.json())
+      .then(data => {
+        window.__historyFetching = false;
+        if (data && Array.isArray(data.jobs) && data.jobs.length > 0) {
+          let updated = false;
+          data.jobs.forEach(remoteJob => {
+            if (!stateStore.getJob(remoteJob.jobId)) {
+              stateStore.saveJob(remoteJob);
+              updated = true;
+            }
+          });
+          if (updated) {
+            renderHistory(centerId);
+          }
+        }
+      })
+      .catch(() => { window.__historyFetching = false; });
+  }
+
   const searchQuery = (document.getElementById('search-history-input')?.value || '').toLowerCase().trim();
 
-  // 1. Retrieve all jobs for center and sort newest first
+  // 1. Retrieve all jobs strictly isolated for this center and sort newest first
   let allJobs = stateStore.getJobs(centerId);
   allJobs.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
@@ -2711,9 +2764,10 @@ function renderHistory(centerId) {
   // 3. Filter jobs by active selected date range
   let filteredJobs = filterJobsByDateRange(allJobs, currentHistoryRange);
 
-  // 4. Search filter by filename or tracking token
+  // 4. Search filter by Customer ID, filename or tracking token
   if (searchQuery) {
     filteredJobs = filteredJobs.filter(j =>
+      (j.customerId || '').toLowerCase().includes(searchQuery) ||
       (j.originalFileName || '').toLowerCase().includes(searchQuery) ||
       (j.trackingToken || '').toLowerCase().includes(searchQuery)
     );
@@ -2740,7 +2794,7 @@ function renderHistory(centerId) {
   if (filteredJobs.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="7" class="text-center text-muted" style="padding: 2.5rem 1rem;">
+        <td colspan="8" class="text-center text-muted" style="padding: 2.5rem 1rem;">
           No orders found for the selected timeframe.
         </td>
       </tr>
@@ -2748,26 +2802,47 @@ function renderHistory(centerId) {
     return;
   }
 
-  tbody.innerHTML = filteredJobs.map(job => `
-    <tr>
-      <td>
-        <div class="font-medium text-main text-sm">${escapeHtml(job.originalFileName)}</div>
-        <div class="text-xs text-muted">${formatBytes(job.fileSizeBytes)}</div>
-      </td>
-      <td>
-        <span class="font-mono text-xs" style="background: var(--primary-50); padding: 2px 6px; border-radius: 4px;">
-          ${job.trackingToken}
-        </span>
-      </td>
-      <td class="text-xs">${job.pageCount} pgs &times; ${job.copies} ${job.copies > 1 ? 'copies' : 'copy'}</td>
-      <td class="text-xs">${job.paperSize} &bull; ${job.colorMode === 'color' ? 'Color' : 'B&W'} &bull; ${job.duplex ? '2-Sided' : '1-Sided'}</td>
-      <td class="font-semibold text-sm">${formatCurrencyINR(job.estimatedAmount || 0)}</td>
-      <td class="text-xs text-muted" title="${new Date(job.createdAt || job.updatedAt).toLocaleString()}">
-        ${formatTimeAgo(job.completedAt || job.updatedAt || job.createdAt)}
-      </td>
-      <td>${getStatusBadge(job.status)}</td>
-    </tr>
-  `).join('');
+  tbody.innerHTML = filteredJobs.map(job => {
+    const custId = job.customerId || ('CUST-' + (job.jobId ? job.jobId.slice(-6).toUpperCase() : '100001'));
+    const createdAtDate = new Date(job.createdAt || Date.now());
+    const formattedDate = createdAtDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    const formattedTime = createdAtDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    const paidAmt = formatCurrencyINR(job.paidAmount || job.estimatedAmount || 0);
+
+    return `
+      <tr>
+        <td>
+          <span class="badge" style="font-family: monospace; font-size: 0.75rem; font-weight: 600; background: var(--primary-50); color: var(--primary-700); padding: 3px 6px; border-radius: 4px; border: 1px solid var(--primary-200);">
+            ${escapeHtml(custId)}
+          </span>
+        </td>
+        <td class="text-xs">
+          <div class="font-medium text-main" style="font-size: 0.8125rem;">${formattedDate}</div>
+          <div class="text-muted" style="font-size: 0.72rem;">${formattedTime} &bull; ${formatTimeAgo(job.createdAt)}</div>
+        </td>
+        <td class="text-xs">
+          <span class="font-semibold" style="color: var(--text-main); font-size: 0.8125rem;">${job.pageCount || 1} pgs</span>
+          <span class="text-muted"> &times; ${job.copies || 1} ${job.copies > 1 ? 'copies' : 'copy'}</span>
+        </td>
+        <td>
+          <span class="font-semibold text-sm" style="color: var(--primary-700);">${paidAmt}</span>
+        </td>
+        <td>
+          <div class="font-medium text-main text-sm">${escapeHtml(job.originalFileName || 'Document')}</div>
+          <div class="text-xs text-muted" style="font-size: 0.7rem;">Not stored in database (transient print)</div>
+        </td>
+        <td>
+          <span class="font-mono text-xs" style="background: var(--bg-surface-subtle); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-color);">
+            ${escapeHtml(job.trackingToken || '-')}
+          </span>
+        </td>
+        <td class="text-xs text-muted">
+          ${escapeHtml(job.paperSize || 'A4')} &bull; ${job.colorMode === 'color' ? 'Color' : 'B&W'} &bull; ${job.duplex ? '2-Sided' : '1-Sided'}
+        </td>
+        <td>${getStatusBadge(job.status)}</td>
+      </tr>
+    `;
+  }).join('');
 }
 
 function getOrGenerateUniqueId(user) {

@@ -176,7 +176,18 @@ class StateStore {
       localStorage.setItem('smartprint_jobs', JSON.stringify(filtered));
     }
     if (centerId) {
-      return filtered.filter(j => j.centerId === centerId);
+      const cleanTarget = String(centerId).trim().toLowerCase();
+      const centerObj = this.getCenter(centerId);
+      const allowedIds = new Set([cleanTarget]);
+      if (centerObj) {
+        if (centerObj.centerId) allowedIds.add(String(centerObj.centerId).trim().toLowerCase());
+        if (centerObj.publicId) allowedIds.add(String(centerObj.publicId).trim().toLowerCase());
+        if (centerObj.uniqueId) allowedIds.add(String(centerObj.uniqueId).trim().toLowerCase());
+      }
+      return filtered.filter(j => {
+        if (!j.centerId) return false;
+        return allowedIds.has(String(j.centerId).trim().toLowerCase());
+      });
     }
     return filtered;
   }

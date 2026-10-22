@@ -199,14 +199,19 @@ export const api = {
     const authoritativePaise = billableSheets * ratePaise * copies;
     const authoritativeRupees = Number((authoritativePaise / 100).toFixed(2));
 
+    // Random Customer ID (Requirement: add random customer id date time how many pages they print how many they pay us)
+    const randomCustomerNumber = Math.floor(100000 + Math.random() * 900000);
+    const customerId = payload.customerId || `CUST-${randomCustomerNumber}`;
+
     const newJob = {
       jobId: `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      customerId: customerId,
       centerId: center.centerId || payload.centerId,
       trackingToken,
       originalFileName,
       files: filesSummary,
       fileCount: rawFiles.length,
-      storagePath: `customer-uploads/${center.centerId || payload.centerId}/${Date.now()}_${firstFileName}`,
+      storagePath: null, // Requirement: Do NOT store or save customer file into database
       fileSizeBytes: rawFiles.reduce((acc, f) => acc + (f.size || 0), 0),
       mimeType: rawFiles[0].type || 'application/pdf',
       pageCount: totalEstimatedPages,
@@ -218,12 +223,22 @@ export const api = {
       paymentStatus: 'pending',
       amountPaise: authoritativePaise,
       estimatedAmount: authoritativeRupees,
+      paidAmount: authoritativeRupees,
       customerNote: payload.customerNote ? String(payload.customerNote).substring(0, 200) : '',
       status: 'pending_confirmation',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + 24 * 3600000).toISOString() // 24-hr retention
     };
+
+    // Sync to backend store-isolated repository
+    try {
+      fetch('/api/jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newJob)
+      }).catch(() => {});
+    } catch (e) {}
 
     return stateStore.saveJob(newJob);
   },
@@ -255,6 +270,7 @@ export const api = {
     // Sanitize job for public customer tracking: Never expose raw private storage path
     return {
       jobId: job.jobId,
+      customerId: job.customerId,
       trackingToken: job.trackingToken,
       originalFileName: job.originalFileName,
       fileCount: job.fileCount || 1,
@@ -266,6 +282,7 @@ export const api = {
       paymentMethod: job.paymentMethod || 'cash',
       paymentStatus: job.paymentStatus || 'pending',
       estimatedAmount: job.estimatedAmount || 2.0,
+      paidAmount: job.paidAmount || job.estimatedAmount || 2.0,
       status: job.status,
       createdAt: job.createdAt,
       routedPrinter: job.routedPrinter || null,
@@ -273,13 +290,32 @@ export const api = {
     };
   },
 
-  // Owner management APIs
+  // Owner management APIs (Store-isolated)
   async getQueue(centerId) {
+    if (centerId) {
+      try {
+        const res = await fetch(`/api/jobs?center=${encodeURIComponent(centerId)}`, { cache: 'no-cache' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && Array.isArray(data.jobs)) {
+            data.jobs.forEach(job => stateStore.saveJob(job));
+          }
+        }
+      } catch (e) {}
+    }
     return stateStore.getJobs(centerId);
   },
 
-  async updateJobStatus(jobId, status) {
-    return stateStore.updateJobStatus(jobId, status);
+  async updateJobStatus(jobId, status, centerId = null) {
+    const updated = stateStore.updateJobStatus(jobId, status, "owner", centerId);
+    try {
+      fetch('/api/jobs/update-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId, status, centerId })
+      }).catch(() => {});
+    } catch (e) {}
+    return updated;
   },
 
   async updateCenterProfile(centerId, profile) {
