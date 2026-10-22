@@ -1,42 +1,42 @@
 {
   "1000000": {
-    "isOpen": true,
-    "status": "active",
+    "isOpen": false,
+    "status": "closed",
     "updatedAt": "2026-10-22T08:00:00.000Z"
   },
   "CTR-1000000": {
-    "isOpen": true,
-    "status": "active",
+    "isOpen": false,
+    "status": "closed",
     "updatedAt": "2026-10-22T08:00:00.000Z"
   },
   "center_default": {
-    "isOpen": true,
-    "status": "active",
+    "isOpen": false,
+    "status": "closed",
     "updatedAt": "2026-10-22T08:00:00.000Z"
   },
   "1000001": {
-    "isOpen": true,
-    "status": "active",
+    "isOpen": false,
+    "status": "closed",
     "updatedAt": "2026-10-22T08:00:00.000Z"
   },
   "CTR-1000001": {
-    "isOpen": true,
-    "status": "active",
+    "isOpen": false,
+    "status": "closed",
     "updatedAt": "2026-10-22T08:00:00.000Z"
   },
   "center_fuU7qXKQ": {
-    "isOpen": true,
-    "status": "active",
+    "isOpen": false,
+    "status": "closed",
     "updatedAt": "2026-10-22T08:00:00.000Z"
   },
   "default": {
-    "isOpen": true,
-    "status": "active",
+    "isOpen": false,
+    "status": "closed",
     "updatedAt": "2026-10-22T08:00:00.000Z"
   },
   "_default": {
-    "isOpen": true,
-    "status": "active",
+    "isOpen": false,
+    "status": "closed",
     "updatedAt": "2026-10-22T08:00:00.000Z"
   }
 }

@@ -290,110 +290,111 @@ function populateCenterInfo(center) {
  */
 let lastDetectedIsOpen = null;
 function startLiveStoreStatusWatcher(centerQuery) {
-  async function checkLiveStatus() {
-    try {
-      // 0. Instant sync from localStorage if in same browser - ONLY for this center
-      const targetId = currentCenter?.publicId || currentCenter?.centerId || centerQuery;
-      if (targetId && targetId !== 'default') {
-        const localSaved = (currentCenter?.centerId && localStorage.getItem(`smartprint_store_status_${currentCenter.centerId}`)) ||
-                           (currentCenter?.publicId && localStorage.getItem(`smartprint_store_status_${currentCenter.publicId}`)) ||
-                           localStorage.getItem(`smartprint_store_status_${targetId}`);
-        if (localSaved === 'closed' || localSaved === 'open') {
-          const localIsOpen = localSaved === 'open';
-          if (currentCenter && currentCenter.isOpen !== localIsOpen) {
-            currentCenter.isOpen = localIsOpen;
-            currentCenter.status = localIsOpen ? 'active' : 'closed';
-            populateCenterInfo(currentCenter);
-            if (localIsOpen) {
-              showToast("🟢 Store has opened! Upload & printing options are now available.", "success");
-            } else {
-              showToast("🔴 Store has closed. New order submissions are currently paused.", "info");
-            }
-          }
-        }
-      } else if (!targetId || targetId === 'default') {
-        const localSaved = localStorage.getItem('smartprint_store_status_default') || localStorage.getItem('smartprint_store_status');
-        if (localSaved === 'closed' || localSaved === 'open') {
-          const localIsOpen = localSaved === 'open';
-          if (currentCenter && currentCenter.isOpen !== localIsOpen) {
-            currentCenter.isOpen = localIsOpen;
-            currentCenter.status = localIsOpen ? 'active' : 'closed';
-            populateCenterInfo(currentCenter);
-            if (localIsOpen) {
-              showToast("🟢 Store has opened! Upload & printing options are now available.", "success");
-            } else {
-              showToast("🔴 Store has closed. New order submissions are currently paused.", "info");
-            }
-          }
-        }
-      }
+  const targetId = currentCenter?.publicId || currentCenter?.centerId || centerQuery || '';
 
-      // 1. Authoritative check via API endpoint for this specific center
-      const targetQuery = currentCenter?.publicId || currentCenter?.centerId || centerQuery || '';
-      const res = await fetch(`/api/store/status?center=${encodeURIComponent(targetQuery)}`, { cache: 'no-cache' });
-      if (res.ok) {
-        const data = await res.json();
-        if (data && typeof data.isOpen === 'boolean') {
-          const nextIsOpen = data.isOpen;
-          if (currentCenter && currentCenter.isOpen !== nextIsOpen) {
-            currentCenter.isOpen = nextIsOpen;
-            currentCenter.status = nextIsOpen ? 'active' : 'closed';
-            populateCenterInfo(currentCenter);
-            if (nextIsOpen) {
-              showToast("🟢 Store has opened! Upload & printing options are now available.", "success");
-            } else {
-              showToast("🔴 Store has closed. New order submissions are currently paused.", "info");
-            }
-          }
-          lastDetectedIsOpen = nextIsOpen;
-        }
+  function applyStatusUpdate(nextIsOpen, force = false) {
+    if (!currentCenter) return;
+    if (force || currentCenter.isOpen !== nextIsOpen) {
+      lastDetectedIsOpen = nextIsOpen;
+      currentCenter.isOpen = nextIsOpen;
+      currentCenter.status = nextIsOpen ? 'active' : 'closed';
+      populateCenterInfo(currentCenter);
+      if (nextIsOpen) {
+        showToast("🟢 Store has opened! Upload & printing options are now available.", "success");
+      } else {
+        showToast("🔴 Store has closed. New order submissions are currently paused.", "info");
       }
-    } catch (e) {
-      // Ignore network blips during background polling
     }
   }
 
-  // 1. Instant 0ms Cross-tab / same-browser synchronization via storage event - ONLY for this center
+  // 1. Zero-delay Real-Time Server-Sent Events (SSE) Stream
+  let sseSource = null;
+  function connectStatusStream() {
+    if (typeof window.EventSource === 'undefined') return;
+    try {
+      const sseTarget = currentCenter?.publicId || currentCenter?.centerId || targetId;
+      if (!sseTarget) return;
+
+      if (sseSource) {
+        try { sseSource.close(); } catch(e) {}
+      }
+
+      sseSource = new EventSource(`/api/store/live-status?center=${encodeURIComponent(sseTarget)}`);
+
+      sseSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data || '{}');
+          if (typeof data.isOpen === 'boolean') {
+            applyStatusUpdate(data.isOpen);
+          }
+        } catch(err) {}
+      };
+
+      sseSource.onerror = () => {
+        try { sseSource.close(); } catch(e) {}
+        // Reconnect after 3 seconds if disconnected
+        setTimeout(connectStatusStream, 3000);
+      };
+    } catch (e) {
+      // EventSource fallback
+    }
+  }
+  connectStatusStream();
+
+  // 2. Center-specific localStorage check (for multi-tab testing on counter PC)
+  async function checkLiveStatus() {
+    try {
+      const activeId = currentCenter?.publicId || currentCenter?.centerId || targetId;
+      if (activeId && activeId !== 'default') {
+        const localSaved = (currentCenter?.centerId && localStorage.getItem(`smartprint_store_status_${currentCenter.centerId}`)) ||
+                           (currentCenter?.publicId && localStorage.getItem(`smartprint_store_status_${currentCenter.publicId}`)) ||
+                           localStorage.getItem(`smartprint_store_status_${activeId}`);
+        if (localSaved === 'closed' || localSaved === 'open') {
+          applyStatusUpdate(localSaved === 'open');
+        }
+      }
+
+      // Authoritative API check
+      const res = await fetch(`/api/store/status?center=${encodeURIComponent(activeId)}`, { cache: 'no-cache' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && typeof data.isOpen === 'boolean') {
+          applyStatusUpdate(data.isOpen);
+        }
+      }
+    } catch (e) {}
+  }
+
+  // 3. Instant 0ms Cross-tab / same-browser synchronization via storage event - STRICTLY for this center
   window.addEventListener('storage', (e) => {
     if (!e.key || !currentCenter) return;
     const centerKeys = [
       currentCenter.centerId ? `smartprint_store_status_${currentCenter.centerId}` : null,
       currentCenter.publicId ? `smartprint_store_status_${currentCenter.publicId}` : null,
       currentCenter.uniqueId ? `smartprint_store_status_${currentCenter.uniqueId}` : null,
-      centerQuery ? `smartprint_store_status_${centerQuery}` : null
+      targetId ? `smartprint_store_status_${targetId}` : null
     ].filter(Boolean);
-
-    if (!centerQuery || centerQuery === 'default') {
-      centerKeys.push('smartprint_store_status_default', 'smartprint_store_status');
-    }
 
     if (centerKeys.includes(e.key)) {
       const nextIsOpen = e.newValue === 'open';
-      if (currentCenter && currentCenter.isOpen !== nextIsOpen) {
-        lastDetectedIsOpen = nextIsOpen;
-        currentCenter.isOpen = nextIsOpen;
-        currentCenter.status = nextIsOpen ? 'active' : 'closed';
-        populateCenterInfo(currentCenter);
-        if (nextIsOpen) {
-          showToast("🟢 Store has opened! Upload & printing options are now available.", "success");
-        } else {
-          showToast("🔴 Store has closed. New order submissions are currently paused.", "info");
-        }
+      applyStatusUpdate(nextIsOpen);
+    }
+  });
+
+  // 4. Background fallback poll every 2 seconds
+  setInterval(checkLiveStatus, 2000);
+
+  // 5. Instant check when mobile phone screen is awakened or tab regained focus
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      checkLiveStatus();
+      if (!sseSource || sseSource.readyState === EventSource.CLOSED) {
+        connectStatusStream();
       }
     }
   });
 
-  // 2. Real-time background server check every 1 second
-  setInterval(checkLiveStatus, 1000);
-
-  // 3. Instant check when mobile phone screen is awakened or tab regained focus
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      checkLiveStatus();
-    }
-  });
-
-  // 4. Initial immediate check
+  // Initial immediate check
   checkLiveStatus();
 }
 

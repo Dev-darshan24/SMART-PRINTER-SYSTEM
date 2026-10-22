@@ -15,8 +15,8 @@
       "colorSingle": 10,
       "colorDouble": 18
     },
-    "isOpen": true,
-    "status": "active",
+    "isOpen": false,
+    "status": "closed",
     "updatedAt": "2026-10-22T08:00:00.000Z"
   },
   "CTR-1000000": {
@@ -35,8 +35,8 @@
       "colorSingle": 10,
       "colorDouble": 18
     },
-    "isOpen": true,
-    "status": "active",
+    "isOpen": false,
+    "status": "closed",
     "updatedAt": "2026-10-22T08:00:00.000Z"
   },
   "1000000": {
@@ -55,8 +55,8 @@
       "colorSingle": 10,
       "colorDouble": 18
     },
-    "isOpen": true,
-    "status": "active",
+    "isOpen": false,
+    "status": "closed",
     "updatedAt": "2026-10-22T08:00:00.000Z"
   },
   "CTR-100000": {
@@ -75,8 +75,8 @@
       "colorSingle": 10,
       "colorDouble": 18
     },
-    "isOpen": true,
-    "status": "active",
+    "isOpen": false,
+    "status": "closed",
     "updatedAt": "2026-10-22T08:00:00.000Z"
   },
   "default": {
@@ -95,8 +95,8 @@
       "colorSingle": 10,
       "colorDouble": 18
     },
-    "isOpen": true,
-    "status": "active",
+    "isOpen": false,
+    "status": "closed",
     "updatedAt": "2026-10-22T08:00:00.000Z"
   },
   "center_fuU7qXKQ": {
@@ -115,8 +115,8 @@
       "colorSingle": 10,
       "colorDouble": 18
     },
-    "isOpen": true,
-    "status": "active",
+    "isOpen": false,
+    "status": "closed",
     "updatedAt": "2026-10-22T08:00:00.000Z"
   },
   "CTR-1000001": {
@@ -135,8 +135,8 @@
       "colorSingle": 10,
       "colorDouble": 18
     },
-    "isOpen": true,
-    "status": "active",
+    "isOpen": false,
+    "status": "closed",
     "updatedAt": "2026-10-22T08:00:00.000Z"
   },
   "1000001": {
@@ -155,8 +155,8 @@
       "colorSingle": 10,
       "colorDouble": 18
     },
-    "isOpen": true,
-    "status": "active",
+    "isOpen": false,
+    "status": "closed",
     "updatedAt": "2026-10-22T08:00:00.000Z"
   },
   "CTR-FUU7QX": {
@@ -175,8 +175,8 @@
       "colorSingle": 10,
       "colorDouble": 18
     },
-    "isOpen": true,
-    "status": "active",
+    "isOpen": false,
+    "status": "closed",
     "updatedAt": "2026-10-22T08:00:00.000Z"
   }
 }

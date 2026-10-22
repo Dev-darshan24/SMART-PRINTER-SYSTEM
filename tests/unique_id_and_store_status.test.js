@@ -82,4 +82,61 @@ describe("SmartPrint — Unique IDs Starting at 1M & Auto-Close Store Status Syn
     // Ensure substring(0, 6) is not truncating CTR-1000000 to CTR-100000
     assert.strictEqual(appCode.includes("CTR-' + uid.substring(0, 6)"), false, "Must not truncate 7-digit UID with substring(0, 6).");
   });
+
+  it("verifies Server-Sent Events (SSE) endpoint /api/store/live-status is implemented for 0ms real-time status push", () => {
+    const serverCode = fs.readFileSync(serverPath, "utf-8");
+    const customerJsPath = path.resolve(__dirname, "../public/assets/js/customer.js");
+    const customerCode = fs.readFileSync(customerJsPath, "utf-8");
+
+    // Server-side SSE implementation
+    assert.strictEqual(serverCode.includes("/api/store/live-status"), true, "server.js must implement /api/store/live-status.");
+    assert.strictEqual(serverCode.includes("text/event-stream"), true, "server.js must set Content-Type to text/event-stream.");
+    assert.strictEqual(serverCode.includes("broadcastStoreStatusSse"), true, "server.js must implement broadcastStoreStatusSse.");
+
+    // Customer-side EventSource implementation
+    assert.strictEqual(customerCode.includes("new EventSource"), true, "customer.js must connect with EventSource for 0ms sync.");
+    assert.strictEqual(customerCode.includes("/api/store/live-status"), true, "customer.js must subscribe to /api/store/live-status.");
+  });
+
+  it("verifies stores default to closed on start and require explicit owner session opening", () => {
+    const appCode = fs.readFileSync(appPath, "utf-8");
+    const serverCode = fs.readFileSync(serverPath, "utf-8");
+    const storeStatus = JSON.parse(fs.readFileSync(storeStatusPath, "utf-8"));
+
+    // Server returns closed by default if not actively opened
+    assert.strictEqual(serverCode.includes('return { isOpen: false, status: "closed"'), true, "server.js must default unrecorded stores to closed.");
+
+    // app.js requires session-level explicit opening flag
+    assert.strictEqual(appCode.includes("smartprint_session_opened_"), true, "app.js must check session-level opened flag.");
+    assert.strictEqual(appCode.includes("return false; // strictly default to CLOSED"), true, "getStoreStatus must default to closed.");
+
+    // store_status.json initial states are closed
+    Object.values(storeStatus).forEach(s => {
+      assert.strictEqual(s.isOpen, false, "Initial store records in store_status.json must be closed.");
+      assert.strictEqual(s.status, "closed", "Initial status in store_status.json must be 'closed'.");
+    });
+  });
+
+  it("verifies store status button in all dashboard templates defaults to closed", () => {
+    const pages = ["index.html", "dashboard.html", "history.html", "settings.html", "profile.html", "analytics.html"];
+    pages.forEach(page => {
+      const p = path.resolve(__dirname, `../public/app/${page}`);
+      const html = fs.readFileSync(p, "utf-8");
+      assert.strictEqual(html.includes('class="store-status-btn closed"'), true, `${page} must have store-status-btn closed by default.`);
+      assert.strictEqual(html.includes('id="store-status-text">Store Closed</span>'), true, `${page} must display Store Closed initially.`);
+    });
+  });
+
+  it("verifies multi-tenant isolation: store statuses do not bleed across different stores", () => {
+    const customerJsPath = path.resolve(__dirname, "../public/assets/js/customer.js");
+    const customerCode = fs.readFileSync(customerJsPath, "utf-8");
+    const apiJsPath = path.resolve(__dirname, "../public/assets/js/api.js");
+    const apiCode = fs.readFileSync(apiJsPath, "utf-8");
+
+    // No fallback to global non-tenant key in api.js
+    assert.strictEqual(apiCode.includes("localStorage.getItem('smartprint_store_status')"), false, "api.js must not fall back to shared global key.");
+
+    // customer.js uses center-scoped keys only
+    assert.strictEqual(customerCode.includes("smartprint_store_status_${targetId}"), true, "customer.js must isolate store status key by targetId.");
+  });
 });

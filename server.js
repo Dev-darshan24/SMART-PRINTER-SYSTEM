@@ -343,7 +343,7 @@ try {
   storeRegistryMap = {};
 }
 
-// Default store initialization if registry is empty
+// Default store initialization if registry is empty (default starts CLOSED)
 if (!storeRegistryMap["default"] && Object.keys(storeRegistryMap).length === 0) {
   const defaultStore = {
     centerId: "center_default",
@@ -354,8 +354,8 @@ if (!storeRegistryMap["default"] && Object.keys(storeRegistryMap).length === 0) 
     address: "Counter Pickup, Main Branch",
     phone: "+91 98765 43210",
     rates: { bwSingle: 2.0, bwDouble: 3.5, colorSingle: 10.0, colorDouble: 18.0 },
-    isOpen: true,
-    status: "active",
+    isOpen: false,
+    status: "closed",
     updatedAt: new Date().toISOString()
   };
   storeRegistryMap["default"] = defaultStore;
@@ -365,6 +365,69 @@ if (!storeRegistryMap["default"] && Object.keys(storeRegistryMap).length === 0) 
   try {
     fs.writeFileSync(STORE_REGISTRY_FILE, JSON.stringify(storeRegistryMap, null, 2), "utf-8");
   } catch(e) {}
+}
+
+// Active Server-Sent Events (SSE) subscribers map for real-time 0ms status push
+const sseSubscribers = new Map();
+
+function addSseSubscriber(cleanCenterId, res) {
+  if (!cleanCenterId) return;
+  const key = String(cleanCenterId).trim().toLowerCase();
+  if (!sseSubscribers.has(key)) {
+    sseSubscribers.set(key, new Set());
+  }
+  sseSubscribers.get(key).add(res);
+}
+
+function removeSseSubscriber(cleanCenterId, res) {
+  if (!cleanCenterId) return;
+  const key = String(cleanCenterId).trim().toLowerCase();
+  if (sseSubscribers.has(key)) {
+    sseSubscribers.get(key).delete(res);
+    if (sseSubscribers.get(key).size === 0) {
+      sseSubscribers.delete(key);
+    }
+  }
+}
+
+function broadcastStoreStatusSse(centerId, isOpen, status, updatedAt) {
+  const cleanId = String(centerId || "").trim().toLowerCase();
+  const payload = JSON.stringify({
+    centerId: centerId,
+    isOpen: !!isOpen,
+    status: isOpen ? "active" : "closed",
+    updatedAt: updatedAt || new Date().toISOString()
+  });
+  const sseMsg = `data: ${payload}\n\n`;
+
+  const targetKeys = new Set();
+  if (cleanId) targetKeys.add(cleanId);
+
+  // Link aliases from store registry for this store
+  const regStore = Object.values(storeRegistryMap).find(c =>
+    (c.centerId && c.centerId.toLowerCase() === cleanId) ||
+    (c.publicId && c.publicId.toLowerCase() === cleanId) ||
+    (c.uniqueId && String(c.uniqueId).toLowerCase() === cleanId)
+  );
+
+  if (regStore) {
+    if (regStore.centerId) targetKeys.add(regStore.centerId.toLowerCase());
+    if (regStore.publicId) targetKeys.add(regStore.publicId.toLowerCase());
+    if (regStore.uniqueId) targetKeys.add(String(regStore.uniqueId).toLowerCase());
+  }
+
+  targetKeys.forEach(k => {
+    const clients = sseSubscribers.get(k);
+    if (clients) {
+      clients.forEach(clientRes => {
+        try {
+          clientRes.write(sseMsg);
+        } catch (e) {
+          clients.delete(clientRes);
+        }
+      });
+    }
+  });
 }
 
 function getStoreStatusRecord(centerId) {
@@ -397,19 +460,20 @@ function getStoreStatusRecord(centerId) {
       }
     }
 
+    // Default is strictly CLOSED if never registered or recorded
     if (!record) {
-      return { isOpen: true, status: "active", updatedAt: new Date().toISOString() };
+      return { isOpen: false, status: "closed", updatedAt: new Date().toISOString() };
     }
 
-    // Auto-close check: If store was open, check heartbeat presence
+    // Auto-close check: If store was marked open, verify active presence heartbeat
     if (record.isOpen) {
       const lastBeat = storeHeartbeats[cleanId] || 
         (storeRegistryMap[cleanId]?.centerId && storeHeartbeats[storeRegistryMap[cleanId].centerId.toLowerCase()]) ||
         (storeRegistryMap[cleanId]?.publicId && storeHeartbeats[storeRegistryMap[cleanId].publicId.toLowerCase()]) ||
         (storeRegistryMap[cleanId]?.uniqueId && storeHeartbeats[String(storeRegistryMap[cleanId].uniqueId).toLowerCase()]);
       
-      // If heartbeats were registered for this store and last beat was >35 seconds ago, automatically close
-      if (lastBeat && (now - lastBeat > 35000)) {
+      // If heartbeats were not sent or last beat was >30 seconds ago, store is CLOSED
+      if (!lastBeat || (now - lastBeat > 30000)) {
         record.isOpen = false;
         record.status = "closed";
         record.autoClosed = true;
@@ -421,7 +485,7 @@ function getStoreStatusRecord(centerId) {
     return record;
   }
 
-  // Fallback for default / unassigned query only
+  // Fallback for default / unassigned query only (strictly closed by default)
   let defRecord = storeStatusMap["_default"] || storeStatusMap["default"];
   if (!defRecord) {
     const defaultStore = storeRegistryMap["default"] || storeRegistryMap["center_default"];
@@ -432,13 +496,13 @@ function getStoreStatusRecord(centerId) {
         updatedAt: defaultStore.updatedAt || new Date().toISOString()
       };
     } else {
-      defRecord = { isOpen: true, status: "active", updatedAt: new Date().toISOString() };
+      defRecord = { isOpen: false, status: "closed", updatedAt: new Date().toISOString() };
     }
   }
 
   if (defRecord && defRecord.isOpen) {
     const lastBeat = storeHeartbeats["default"] || storeHeartbeats["_default"] || storeHeartbeats["center_default"];
-    if (lastBeat && (now - lastBeat > 35000)) {
+    if (!lastBeat || (now - lastBeat > 30000)) {
       defRecord = {
         ...defRecord,
         isOpen: false,
@@ -446,6 +510,7 @@ function getStoreStatusRecord(centerId) {
         autoClosed: true,
         updatedAt: new Date().toISOString()
       };
+      saveStoreStatusRecord("default", false, "closed");
     }
   }
 
@@ -615,6 +680,9 @@ function saveStoreStatusRecord(centerId, isOpen, status) {
     fs.writeFileSync(STORE_REGISTRY_FILE, JSON.stringify(storeRegistryMap, null, 2), "utf-8");
   } catch (err) {}
 
+  // Instant 0ms Server-Sent Events (SSE) broadcast to all listening customer devices and QR scanners
+  broadcastStoreStatusSse(cleanId, record.isOpen, record.status, record.updatedAt);
+
   return record;
 }
 
@@ -734,6 +802,65 @@ const server = http.createServer((req, res) => {
       });
       res.end(JSON.stringify({ success: true, timestamp: now }));
     });
+    return;
+  }
+
+  // Dynamic Server-Sent Events (SSE) Live Store Status Stream (0ms real-time push for QR customers)
+  if (pathname === "/api/store/live-status") {
+    const centerQuery = (parsedUrl.searchParams.get("center") || "").trim();
+    const cleanCenter = centerQuery.toLowerCase();
+
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      "Connection": "keep-alive",
+      "Access-Control-Allow-Origin": "*",
+      "X-Accel-Buffering": "no"
+    });
+
+    // Send immediate initial authoritative status
+    const currentStatus = getStoreStatusRecord(centerQuery);
+    res.write(`data: ${JSON.stringify({
+      centerId: centerQuery || "default",
+      isOpen: currentStatus.isOpen,
+      status: currentStatus.status,
+      updatedAt: currentStatus.updatedAt
+    })}\n\n`);
+
+    // Register subscriber for cleanCenter and any known aliases
+    const regStore = Object.values(storeRegistryMap).find(c =>
+      (c.centerId && c.centerId.toLowerCase() === cleanCenter) ||
+      (c.publicId && c.publicId.toLowerCase() === cleanCenter) ||
+      (c.uniqueId && String(c.uniqueId).toLowerCase() === cleanCenter)
+    );
+
+    const keysToSubscribe = [cleanCenter];
+    if (regStore) {
+      if (regStore.centerId) keysToSubscribe.push(regStore.centerId.toLowerCase());
+      if (regStore.publicId) keysToSubscribe.push(regStore.publicId.toLowerCase());
+      if (regStore.uniqueId) keysToSubscribe.push(String(regStore.uniqueId).toLowerCase());
+    }
+
+    keysToSubscribe.forEach(k => {
+      if (k) addSseSubscriber(k, res);
+    });
+
+    // Keepalive ping every 15s to keep connection alive
+    const pingInterval = setInterval(() => {
+      try {
+        res.write(": keepalive\n\n");
+      } catch (e) {
+        clearInterval(pingInterval);
+      }
+    }, 15000);
+
+    req.on("close", () => {
+      clearInterval(pingInterval);
+      keysToSubscribe.forEach(k => {
+        if (k) removeSseSubscriber(k, res);
+      });
+    });
+
     return;
   }
 

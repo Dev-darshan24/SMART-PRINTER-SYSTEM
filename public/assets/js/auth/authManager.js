@@ -341,6 +341,19 @@ class AuthManager {
   }
 
   async logout() {
+    const cid = this.user?.centerId;
+    if (cid) {
+      try {
+        sessionStorage.removeItem(`smartprint_session_opened_${cid}`);
+        fetch('/api/store/status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ centerId: cid, isOpen: false, status: 'closed' }),
+          keepalive: true
+        }).catch(() => {});
+      } catch (e) {}
+    }
+    try { sessionStorage.clear(); } catch(e) {}
     this.user = null;
     localStorage.removeItem("smartprint_auth_session");
     try {

@@ -72,14 +72,14 @@ export const api = {
       throw new Error(`CENTER_NOT_FOUND: The requested print center '${publicOrCenterId || 'unknown'}' could not be found.`);
     }
 
-    // Check store status with real-time server check and local storage fallback
-    let status = center.status || "active";
-    let isOpen = center.isOpen !== false && status !== 'closed' && status !== 'inactive';
+    // Check store status with real-time server check and center-specific local storage fallback
+    // Default strictly to closed unless confirmed active/open
+    let status = (center.status === 'active' && center.isOpen === true) ? 'active' : 'closed';
+    let isOpen = status === 'active';
 
     const localSavedStatus = (center.centerId && localStorage.getItem(`smartprint_store_status_${center.centerId}`)) ||
                              (center.publicId && localStorage.getItem(`smartprint_store_status_${center.publicId}`)) ||
-                             (center.uniqueId && localStorage.getItem(`smartprint_store_status_${center.uniqueId}`)) ||
-                             ((!publicOrCenterId || publicOrCenterId === 'default') ? localStorage.getItem('smartprint_store_status') : null);
+                             (center.uniqueId && localStorage.getItem(`smartprint_store_status_${center.uniqueId}`));
     if (localSavedStatus === 'closed') {
       status = 'closed';
       isOpen = false;
