@@ -2,46 +2,41 @@
   "1000000": {
     "isOpen": true,
     "status": "active",
-    "updatedAt": "2026-10-21T16:45:36.101Z"
+    "updatedAt": "2026-10-22T08:00:00.000Z"
+  },
+  "CTR-1000000": {
+    "isOpen": true,
+    "status": "active",
+    "updatedAt": "2026-10-22T08:00:00.000Z"
   },
   "center_default": {
     "isOpen": true,
     "status": "active",
-    "updatedAt": "2026-10-21T16:45:36.101Z"
+    "updatedAt": "2026-10-22T08:00:00.000Z"
   },
-  "CTR-100000": {
+  "1000001": {
     "isOpen": true,
     "status": "active",
-    "updatedAt": "2026-10-21T16:45:36.101Z"
+    "updatedAt": "2026-10-22T08:00:00.000Z"
   },
-  "default": {
+  "CTR-1000001": {
     "isOpen": true,
     "status": "active",
-    "updatedAt": "2026-10-21T16:45:36.101Z"
-  },
-  "_default": {
-    "isOpen": true,
-    "status": "active",
-    "updatedAt": "2026-10-21T16:45:36.101Z"
+    "updatedAt": "2026-10-22T08:00:00.000Z"
   },
   "center_fuU7qXKQ": {
     "isOpen": true,
     "status": "active",
-    "updatedAt": "2026-10-21T16:26:53.643Z"
+    "updatedAt": "2026-10-22T08:00:00.000Z"
   },
-  "CTR-FUU7QX": {
+  "default": {
     "isOpen": true,
     "status": "active",
-    "updatedAt": "2026-10-21T16:26:53.643Z"
+    "updatedAt": "2026-10-22T08:00:00.000Z"
   },
-  "ctr-fuu7qx": {
+  "_default": {
     "isOpen": true,
     "status": "active",
-    "updatedAt": "2026-10-21T16:26:53.643Z"
-  },
-  "ctr-100000": {
-    "isOpen": true,
-    "status": "active",
-    "updatedAt": "2026-10-21T16:45:36.101Z"
+    "updatedAt": "2026-10-22T08:00:00.000Z"
   }
 }

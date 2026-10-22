@@ -274,23 +274,99 @@ export function initSidebarControls() {
 export function updateStoreStatusUI(isOpen) {
   const storeStatusBtn = document.getElementById('store-status-btn');
   const storeStatusText = document.getElementById('store-status-text');
-  if (!storeStatusBtn) return;
-
-  if (isOpen) {
-    storeStatusBtn.classList.remove('closed');
-    storeStatusBtn.classList.add('open');
-    storeStatusBtn.setAttribute('aria-pressed', 'true');
-    storeStatusBtn.setAttribute('title', 'Store is OPEN (Accepting Orders). Click to Close Store.');
-    storeStatusBtn.setAttribute('aria-label', 'Store Status: Open. Click to close store.');
-    if (storeStatusText) storeStatusText.textContent = 'Store Open';
-  } else {
-    storeStatusBtn.classList.remove('open');
-    storeStatusBtn.classList.add('closed');
-    storeStatusBtn.setAttribute('aria-pressed', 'false');
-    storeStatusBtn.setAttribute('title', 'Store is CLOSED (Orders Paused). Click to Open Store.');
-    storeStatusBtn.setAttribute('aria-label', 'Store Status: Closed. Click to open store.');
-    if (storeStatusText) storeStatusText.textContent = 'Store Closed';
+  if (storeStatusBtn) {
+    if (isOpen) {
+      storeStatusBtn.classList.remove('closed');
+      storeStatusBtn.classList.add('open');
+      storeStatusBtn.setAttribute('aria-pressed', 'true');
+      storeStatusBtn.setAttribute('title', 'Store is OPEN (Accepting Orders). Click to Close Store.');
+      storeStatusBtn.setAttribute('aria-label', 'Store Status: Open. Click to close store.');
+      if (storeStatusText) storeStatusText.textContent = 'Store Open';
+    } else {
+      storeStatusBtn.classList.remove('open');
+      storeStatusBtn.classList.add('closed');
+      storeStatusBtn.setAttribute('aria-pressed', 'false');
+      storeStatusBtn.setAttribute('title', 'Store is CLOSED (Orders Paused). Click to Open Store.');
+      storeStatusBtn.setAttribute('aria-label', 'Store Status: Closed. Click to open store.');
+      if (storeStatusText) storeStatusText.textContent = 'Store Closed';
+    }
   }
+
+  // Synchronize Permanent Profile QR card status badge in real-time
+  const qrStatusEl = document.getElementById('qr-meta-status');
+  if (qrStatusEl) {
+    if (isOpen) {
+      qrStatusEl.innerHTML = `<span class="badge badge-completed text-xs" style="display:inline-flex; align-items:center; gap:5px;"><span style="width:6px; height:6px; border-radius:50%; background:#22c55e;"></span> Store Open</span>`;
+    } else {
+      qrStatusEl.innerHTML = `<span class="badge badge-under-review text-xs" style="display:inline-flex; align-items:center; gap:5px; background:rgba(239,68,68,0.15); color:#f87171; border-color:rgba(239,68,68,0.3);"><span style="width:6px; height:6px; border-radius:50%; background:#ef4444;"></span> Store Closed</span>`;
+    }
+  }
+}
+
+function manageStoreHeartbeat(isOpen, effectiveCenterId, centerObj) {
+  if (window.__storeHeartbeatTimer) {
+    clearInterval(window.__storeHeartbeatTimer);
+    window.__storeHeartbeatTimer = null;
+  }
+  if (!isOpen) return;
+
+  const sendBeat = () => {
+    const targetId = effectiveCenterId || centerObj?.publicId || centerObj?.uniqueId;
+    if (!targetId) return;
+    fetch(`/api/store/heartbeat?center=${encodeURIComponent(targetId)}&uniqueId=${encodeURIComponent(centerObj?.uniqueId || '')}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ centerId: targetId, uniqueId: centerObj?.uniqueId, isOpen: true })
+    }).catch(() => {});
+  };
+
+  sendBeat();
+  window.__storeHeartbeatTimer = setInterval(sendBeat, 10000);
+}
+
+function setupAutoCloseOnExit(effectiveCenterId, centerObj) {
+  if (window.__autoCloseOnExitBound) return;
+  window.__autoCloseOnExitBound = true;
+
+  const triggerAutoClose = () => {
+    const targetId = effectiveCenterId || centerObj?.publicId || centerObj?.uniqueId;
+    if (!targetId) return;
+
+    // 1. Immediately mark localStorage as closed
+    try {
+      localStorage.setItem(`smartprint_store_status_${targetId}`, 'closed');
+      if (centerObj?.publicId) localStorage.setItem(`smartprint_store_status_${centerObj.publicId}`, 'closed');
+      if (centerObj?.uniqueId) localStorage.setItem(`smartprint_store_status_${centerObj.uniqueId}`, 'closed');
+      localStorage.setItem('smartprint_store_status', 'closed');
+    } catch (e) {}
+
+    // 2. Transmit beacon to server to immediately switch status to closed
+    const payload = JSON.stringify({
+      centerId: targetId,
+      publicId: centerObj?.publicId,
+      uniqueId: centerObj?.uniqueId,
+      isOpen: false,
+      status: 'closed',
+      closedBy: 'app_exit'
+    });
+
+    if (navigator.sendBeacon) {
+      const blob = new Blob([payload], { type: 'application/json' });
+      navigator.sendBeacon('/api/store/status', blob);
+    } else {
+      try {
+        fetch('/api/store/status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload,
+          keepalive: true
+        });
+      } catch (e) {}
+    }
+  };
+
+  window.addEventListener('beforeunload', triggerAutoClose);
+  window.addEventListener('pagehide', triggerAutoClose);
 }
 
 export function getStoreStatus(centerId = null) {
@@ -338,7 +414,7 @@ export async function setStoreStatus(isOpen, centerId = null, showNotification =
     localStorage.setItem(`smartprint_store_status_${centerObj.uniqueId}`, isOpen ? 'open' : 'closed');
   }
   // Only update global default key if this is the default center or unassigned
-  if (!effectiveCenterId || effectiveCenterId === 'center_default' || centerObj.publicId === 'CTR-100000') {
+  if (!effectiveCenterId || effectiveCenterId === 'center_default' || centerObj.publicId === 'CTR-1000000' || centerObj.publicId === 'CTR-100000') {
     localStorage.setItem('smartprint_store_status', isOpen ? 'open' : 'closed');
   }
 
@@ -352,7 +428,10 @@ export async function setStoreStatus(isOpen, centerId = null, showNotification =
     });
   }
 
-  // 4. Send to server for this specific center only
+  // 4. Manage heartbeat presence
+  manageStoreHeartbeat(isOpen, effectiveCenterId, centerObj);
+
+  // 5. Send to server for this specific center only
   try {
     await fetch('/api/store/status', {
       method: 'POST',
@@ -369,10 +448,10 @@ export async function setStoreStatus(isOpen, centerId = null, showNotification =
     console.warn("Could not sync store status to server:", err.message);
   }
 
-  // 5. Notify reactive subscribers with center ID
+  // 6. Notify reactive subscribers with center ID
   stateStore.notify('store_status', { centerId: effectiveCenterId, isOpen, status: isOpen ? 'active' : 'closed' });
 
-  // 6. Persist in Firestore if online
+  // 7. Persist in Firestore if online
   if (effectiveCenterId && db) {
     try {
       const centerRef = doc(db, 'centers', effectiveCenterId);
@@ -386,7 +465,7 @@ export async function setStoreStatus(isOpen, centerId = null, showNotification =
     }
   }
 
-  // 7. Toast feedback
+  // 8. Toast feedback
   if (showNotification) {
     if (isOpen) {
       showToast("🟢 Store status updated to OPEN: Customers can upload & print documents.", "success");
@@ -412,9 +491,15 @@ export function initStoreStatusToggle(centerId = null) {
     centerObj.uniqueId ? `smartprint_store_status_${centerObj.uniqueId}` : null
   ].filter(Boolean));
 
-  if (!effectiveCenterId || effectiveCenterId === 'center_default' || centerObj.publicId === 'CTR-100000') {
+  if (!effectiveCenterId || effectiveCenterId === 'center_default' || centerObj.publicId === 'CTR-1000000' || centerObj.publicId === 'CTR-100000') {
     matchingKeys.add('smartprint_store_status');
   }
+
+  // Setup presence heartbeat for open store
+  manageStoreHeartbeat(initialOpen, effectiveCenterId, centerObj);
+
+  // Setup automatic close when tab/window/app is closed
+  setupAutoCloseOnExit(effectiveCenterId, centerObj);
 
   // Cross-page and Cross-tab instant synchronization via storage event - ONLY for this center
   if (!window.__storeStatusStorageListenerAttached) {
@@ -423,6 +508,7 @@ export function initStoreStatusToggle(centerId = null) {
       if (matchingKeys.has(e.key)) {
         const nextOpen = e.newValue === 'open';
         updateStoreStatusUI(nextOpen);
+        manageStoreHeartbeat(nextOpen, effectiveCenterId, centerObj);
       }
     });
   }
@@ -443,6 +529,7 @@ export function initStoreStatusToggle(centerId = null) {
       .then(data => {
         if (data && typeof data.isOpen === 'boolean') {
           updateStoreStatusUI(data.isOpen);
+          manageStoreHeartbeat(data.isOpen, effectiveCenterId, centerObj);
           localStorage.setItem(`smartprint_store_status_${effectiveCenterId}`, data.isOpen ? 'open' : 'closed');
           if (centerObj.publicId) {
             localStorage.setItem(`smartprint_store_status_${centerObj.publicId}`, data.isOpen ? 'open' : 'closed');
@@ -790,7 +877,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const address = (document.getElementById('profile-address')?.value || '').trim();
       const gender = (document.getElementById('profile-gender')?.value || '').trim();
 
-      const uniqueId = getOrGenerateUniqueId(user);
+      const formUid = document.getElementById('profile-unique-id-display')?.value?.trim();
+      const uniqueId = formUid || getOrGenerateUniqueId(user);
       const currentCenter = (centerId ? stateStore.getCenter(centerId) : null) || {};
 
       let resolvedCenterId = centerId || user?.centerId || currentCenter.centerId;
@@ -800,7 +888,7 @@ document.addEventListener('DOMContentLoaded', () => {
       centerId = resolvedCenterId;
       if (user) user.centerId = resolvedCenterId;
 
-      const publicId = currentCenter.publicId || ("CTR-" + (user?.uid ? user.uid.substring(0, 6).toUpperCase() : "DEMO"));
+      const publicId = currentCenter.publicId || ('CTR-' + uniqueId);
 
       const updatedCenter = {
         ...currentCenter,
@@ -1015,8 +1103,8 @@ document.addEventListener('DOMContentLoaded', () => {
   async function loadQrImageForCanvas(profileData) {
     const qrImgEl = document.getElementById('permanent-qr-image');
     const uid = String(profileData.uniqueId || '1000000');
-    const publicId = profileData.publicId || ('CTR-' + uid.substring(0, 6));
-    const customerUrl = `${window.location.origin}/customer/?center=${encodeURIComponent(publicId)}`;
+    const publicId = profileData.publicId || ('CTR-' + uid);
+    const customerUrl = `${window.location.origin}/customer/?center=${encodeURIComponent(profileData.uniqueId || publicId)}`;
     const fallbackUrl = `https://api.qrserver.com/v1/create-qr-code/?size=480x480&margin=10&data=${encodeURIComponent(customerUrl)}`;
     const src = (qrImgEl && qrImgEl.src) ? qrImgEl.src : fallbackUrl;
 
@@ -1062,7 +1150,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const email = (profileData.email || '--').trim();
     const address = (profileData.address || '').trim();
     const uid = String(profileData.uniqueId || '1000000');
-    const publicId = profileData.publicId || ('CTR-' + uid.substring(0, 6));
+    const publicId = profileData.publicId || ('CTR-' + uid);
 
     // 1. Background Fill
     ctx.fillStyle = '#ffffff';
@@ -2681,16 +2769,16 @@ function renderHistory(centerId) {
 function getOrGenerateUniqueId(user) {
   const START_UID = 1000000;
   
-  // 1. In-memory check
-  if (user && user.uniqueId) {
+  const userKey = (user && (user.uid || user.email)) ? (user.uid || user.email) : 'default_operator';
+  const profiles = JSON.parse(localStorage.getItem('smartprint_user_profiles') || '{}');
+
+  // 1. In-memory check (ensure non-default users don't share identical default UID)
+  if (user && user.uniqueId && (userKey === 'default_operator' || String(user.uniqueId) !== '1000000')) {
     return String(user.uniqueId);
   }
 
   // 2. Local profile store check
-  const profiles = JSON.parse(localStorage.getItem('smartprint_user_profiles') || '{}');
-  const userKey = (user && (user.uid || user.email)) ? (user.uid || user.email) : 'default_operator';
-  
-  if (profiles[userKey]?.uniqueId) {
+  if (profiles[userKey]?.uniqueId && (userKey === 'default_operator' || String(profiles[userKey].uniqueId) !== '1000000')) {
     const existingId = String(profiles[userKey].uniqueId);
     if (user) user.uniqueId = existingId;
     return existingId;
@@ -2700,6 +2788,11 @@ function getOrGenerateUniqueId(user) {
   let currentSeq = parseInt(localStorage.getItem('smartprint_next_uid_seq') || `${START_UID}`, 10);
   if (isNaN(currentSeq) || currentSeq < START_UID) {
     currentSeq = START_UID;
+  }
+
+  // If userKey is not the first/default user and currentSeq is 1000000, advance to ensure uniqueness
+  if (currentSeq === START_UID && userKey !== 'default_operator' && Object.keys(profiles).length > 0) {
+    currentSeq = START_UID + 1;
   }
 
   const assignedId = String(currentSeq);
@@ -2722,6 +2815,25 @@ function getOrGenerateUniqueId(user) {
       localStorage.setItem('smartprint_auth_session', JSON.stringify(s));
     }
   } catch(e) {}
+
+  // 4. Asynchronously query authoritative server UID assigner to guarantee cross-session uniqueness
+  fetch(`/api/user/unique-id?uid=${encodeURIComponent(user?.uid || userKey)}&email=${encodeURIComponent(user?.email || '')}&displayName=${encodeURIComponent(user?.displayName || '')}`)
+    .then(r => r.json())
+    .then(data => {
+      if (data && data.success && data.uniqueId && data.uniqueId !== assignedId) {
+        const verifiedId = String(data.uniqueId);
+        if (user) user.uniqueId = verifiedId;
+        profiles[userKey] = { ...(profiles[userKey] || {}), uniqueId: verifiedId };
+        localStorage.setItem('smartprint_user_profiles', JSON.stringify(profiles));
+        const pill = document.getElementById('profile-uid-pill');
+        if (pill) pill.textContent = `UID: ${verifiedId}`;
+        const disp = document.getElementById('profile-unique-id-display');
+        if (disp) disp.value = verifiedId;
+        const lbl = document.getElementById('permanent-qr-uid-label');
+        if (lbl) lbl.textContent = verifiedId;
+      }
+    })
+    .catch(() => {});
 
   return assignedId;
 }
@@ -2766,6 +2878,7 @@ function renderPermanentProfileQR(profile) {
   const qrGender = document.getElementById('qr-meta-gender');
   const profileUidPill = document.getElementById('profile-uid-pill');
   const profileUidDisplay = document.getElementById('profile-unique-id-display');
+  const qrStatusEl = document.getElementById('qr-meta-status');
 
   const uid = String(profile.uniqueId || '1000000');
   if (qrUidLabel) qrUidLabel.textContent = uid;
@@ -2780,6 +2893,16 @@ function renderPermanentProfileQR(profile) {
   if (qrPhone) qrPhone.textContent = profile.phone || '--';
   if (qrGender) qrGender.textContent = profile.gender || '--';
 
+  // Live status badge synced with store open/closed
+  if (qrStatusEl) {
+    const isStoreOpen = (typeof profile.isOpen === 'boolean') ? profile.isOpen : getStoreStatus(profile.centerId || profile.publicId);
+    if (isStoreOpen) {
+      qrStatusEl.innerHTML = `<span class="badge badge-completed text-xs" style="display:inline-flex; align-items:center; gap:5px;"><span style="width:6px; height:6px; border-radius:50%; background:#22c55e;"></span> Store Open</span>`;
+    } else {
+      qrStatusEl.innerHTML = `<span class="badge badge-under-review text-xs" style="display:inline-flex; align-items:center; gap:5px; background:rgba(239,68,68,0.15); color:#f87171; border-color:rgba(239,68,68,0.3);"><span style="width:6px; height:6px; border-radius:50%; background:#ef4444;"></span> Store Closed</span>`;
+    }
+  }
+
   // Construct structured permanent QR payload
   const qrPayload = JSON.stringify({
     type: "smartprint_user_profile",
@@ -2793,7 +2916,8 @@ function renderPermanentProfileQR(profile) {
     v: 1
   });
 
-  const qrTarget = `${window.location.origin}/customer/?center=${encodeURIComponent(profile.publicId || ('CTR-' + uid.substring(0, 6)))}`;
+  const publicId = profile.publicId || ('CTR-' + uid);
+  const qrTarget = `${window.location.origin}/customer/?center=${encodeURIComponent(profile.uniqueId || publicId)}`;
   const normalQrDataUrl = generateNormalQrDataUrl(qrTarget, 260);
   if (qrImageEl) {
     qrImageEl.src = normalQrDataUrl;
@@ -2818,7 +2942,11 @@ function populateProfileForm(center, maybeUser = null) {
     if (el) el.textContent = val !== undefined && val !== null ? val : '';
   };
 
-  const uniqueId = c.uniqueId || user.uniqueId || getOrGenerateUniqueId(user);
+  const uniqueId = (c.uniqueId && String(c.uniqueId) !== '1000000') 
+    ? String(c.uniqueId) 
+    : ((user.uniqueId && String(user.uniqueId) !== '1000000') 
+        ? String(user.uniqueId) 
+        : getOrGenerateUniqueId(user));
 
   // 1. STORE NAME
   const storeName = c.storeName || c.name || (user.displayName ? `${user.displayName}'s Center` : 'SmartPrint Center');

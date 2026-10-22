@@ -245,6 +245,93 @@ try {
   storeStatusMap = {};
 }
 
+// In-memory heartbeat tracker for presence detection (auto-close on exit / inactivity)
+const storeHeartbeats = {}; // centerKey (lower) -> timestamp (ms)
+
+// Centralized persistent Unique ID registry (Starting at 1,000,000 / 1M)
+const UNIQUE_IDS_FILE = path.join(__dirname, "unique_ids.json");
+let uniqueIdsData = { nextUid: 1000000, mappings: {} };
+try {
+  if (fs.existsSync(UNIQUE_IDS_FILE)) {
+    uniqueIdsData = JSON.parse(fs.readFileSync(UNIQUE_IDS_FILE, "utf-8"));
+  }
+} catch (e) {
+  uniqueIdsData = { nextUid: 1000000, mappings: {} };
+}
+if (!uniqueIdsData.nextUid || uniqueIdsData.nextUid < 1000000) {
+  uniqueIdsData.nextUid = 1000000;
+}
+if (!uniqueIdsData.mappings) {
+  uniqueIdsData.mappings = {};
+}
+
+function getOrAssignUniqueId(identifier, details = {}) {
+  const cleanKey = String(identifier || "").trim().toLowerCase();
+  const emailKey = details.email ? String(details.email).trim().toLowerCase() : "";
+  const uidKey = details.uid ? String(details.uid).trim() : "";
+  const centerIdKey = details.centerId ? String(details.centerId).trim() : "";
+  const nameKey = (details.displayName || details.storeName || details.userName || "").trim().toLowerCase();
+  const phoneKey = details.phone ? String(details.phone).replace(/\D/g, '') : "";
+
+  // 1. Look for existing mapping across any provided key
+  const searchKeys = [cleanKey, emailKey, uidKey, centerIdKey, nameKey, phoneKey].filter(Boolean);
+  for (const k of searchKeys) {
+    if (uniqueIdsData.mappings[k]) {
+      const existingUid = String(uniqueIdsData.mappings[k]);
+      for (const sk of searchKeys) {
+        uniqueIdsData.mappings[sk] = existingUid;
+      }
+      return existingUid;
+    }
+  }
+
+  // 2. Check storeRegistryMap for existing store record
+  for (const store of Object.values(storeRegistryMap)) {
+    if (store && store.uniqueId && Number(store.uniqueId) >= 1000000) {
+      const match = searchKeys.some(k => 
+        (store.centerId && store.centerId.toLowerCase() === k.toLowerCase()) ||
+        (store.publicId && store.publicId.toLowerCase() === k.toLowerCase()) ||
+        (store.phone && store.phone.replace(/\D/g, '') === k.replace(/\D/g, '')) ||
+        (store.storeName && store.storeName.toLowerCase() === k.toLowerCase()) ||
+        (store.name && store.name.toLowerCase() === k.toLowerCase())
+      );
+      if (match) {
+        const storeUid = String(store.uniqueId);
+        for (const sk of searchKeys) {
+          uniqueIdsData.mappings[sk] = storeUid;
+        }
+        return storeUid;
+      }
+    }
+  }
+
+  // 3. Assign next sequential unique ID starting from 1M (1,000,000)
+  let currentSeq = parseInt(uniqueIdsData.nextUid, 10);
+  if (isNaN(currentSeq) || currentSeq < 1000000) {
+    currentSeq = 1000000;
+  }
+
+  const existingValues = new Set(Object.values(uniqueIdsData.mappings));
+  while (existingValues.has(String(currentSeq))) {
+    currentSeq++;
+  }
+
+  const assignedUid = String(currentSeq);
+  uniqueIdsData.nextUid = currentSeq + 1;
+
+  for (const sk of searchKeys) {
+    uniqueIdsData.mappings[sk] = assignedUid;
+  }
+
+  try {
+    fs.writeFileSync(UNIQUE_IDS_FILE, JSON.stringify(uniqueIdsData, null, 2), "utf-8");
+  } catch (e) {
+    console.warn("Could not save unique_ids.json:", e.message);
+  }
+
+  return assignedUid;
+}
+
 // In-memory and file-persisted store registry (for instant <1s QR scan resolution)
 const STORE_REGISTRY_FILE = path.join(__dirname, "store_registry.json");
 let storeRegistryMap = {};
@@ -260,7 +347,7 @@ try {
 if (!storeRegistryMap["default"] && Object.keys(storeRegistryMap).length === 0) {
   const defaultStore = {
     centerId: "center_default",
-    publicId: "CTR-100000",
+    publicId: "CTR-1000000",
     uniqueId: "1000000",
     name: "SmartPrint Xerox & Digital Store",
     storeName: "SmartPrint Xerox & Digital Store",
@@ -273,7 +360,7 @@ if (!storeRegistryMap["default"] && Object.keys(storeRegistryMap).length === 0) 
   };
   storeRegistryMap["default"] = defaultStore;
   storeRegistryMap["center_default"] = defaultStore;
-  storeRegistryMap["CTR-100000"] = defaultStore;
+  storeRegistryMap["CTR-1000000"] = defaultStore;
   storeRegistryMap["1000000"] = defaultStore;
   try {
     fs.writeFileSync(STORE_REGISTRY_FILE, JSON.stringify(storeRegistryMap, null, 2), "utf-8");
@@ -281,49 +368,88 @@ if (!storeRegistryMap["default"] && Object.keys(storeRegistryMap).length === 0) 
 }
 
 function getStoreStatusRecord(centerId) {
+  const now = Date.now();
   if (centerId && centerId !== "default" && centerId !== "_default" && centerId !== "all") {
     const cleanId = String(centerId).trim().toLowerCase();
     const key = Object.keys(storeStatusMap).find(k => k.toLowerCase() === cleanId);
-    if (key && storeStatusMap[key]) return storeStatusMap[key];
+    let record = (key && storeStatusMap[key]) ? { ...storeStatusMap[key] } : null;
 
-    // Check alias matching in storeRegistryMap
-    const regStore = Object.values(storeRegistryMap).find(c => 
-      (c.centerId && c.centerId.toLowerCase() === cleanId) ||
-      (c.publicId && c.publicId.toLowerCase() === cleanId) ||
-      (c.uniqueId && String(c.uniqueId).toLowerCase() === cleanId) ||
-      (c.storeName && c.storeName.toLowerCase() === cleanId) ||
-      (c.name && c.name.toLowerCase() === cleanId)
-    );
-    if (regStore) {
-      if (regStore.publicId && storeStatusMap[regStore.publicId]) return storeStatusMap[regStore.publicId];
-      if (regStore.centerId && storeStatusMap[regStore.centerId]) return storeStatusMap[regStore.centerId];
-      if (regStore.uniqueId && storeStatusMap[String(regStore.uniqueId)]) return storeStatusMap[String(regStore.uniqueId)];
-      if (typeof regStore.isOpen === 'boolean') {
-        return {
-          isOpen: regStore.isOpen,
-          status: regStore.status || (regStore.isOpen ? "active" : "closed"),
-          updatedAt: regStore.updatedAt || new Date().toISOString()
-        };
+    if (!record) {
+      // Check alias matching in storeRegistryMap
+      const regStore = Object.values(storeRegistryMap).find(c => 
+        (c.centerId && c.centerId.toLowerCase() === cleanId) ||
+        (c.publicId && c.publicId.toLowerCase() === cleanId) ||
+        (c.uniqueId && String(c.uniqueId).toLowerCase() === cleanId) ||
+        (c.storeName && c.storeName.toLowerCase() === cleanId) ||
+        (c.name && c.name.toLowerCase() === cleanId)
+      );
+      if (regStore) {
+        if (regStore.publicId && storeStatusMap[regStore.publicId]) record = { ...storeStatusMap[regStore.publicId] };
+        else if (regStore.centerId && storeStatusMap[regStore.centerId]) record = { ...storeStatusMap[regStore.centerId] };
+        else if (regStore.uniqueId && storeStatusMap[String(regStore.uniqueId)]) record = { ...storeStatusMap[String(regStore.uniqueId)] };
+        else if (typeof regStore.isOpen === 'boolean') {
+          record = {
+            isOpen: regStore.isOpen,
+            status: regStore.status || (regStore.isOpen ? "active" : "closed"),
+            updatedAt: regStore.updatedAt || new Date().toISOString()
+          };
+        }
       }
     }
 
-    // A specific center was queried that is not recorded yet: return default open for this center
-    return { isOpen: true, status: "active", updatedAt: new Date().toISOString() };
+    if (!record) {
+      return { isOpen: true, status: "active", updatedAt: new Date().toISOString() };
+    }
+
+    // Auto-close check: If store was open, check heartbeat presence
+    if (record.isOpen) {
+      const lastBeat = storeHeartbeats[cleanId] || 
+        (storeRegistryMap[cleanId]?.centerId && storeHeartbeats[storeRegistryMap[cleanId].centerId.toLowerCase()]) ||
+        (storeRegistryMap[cleanId]?.publicId && storeHeartbeats[storeRegistryMap[cleanId].publicId.toLowerCase()]) ||
+        (storeRegistryMap[cleanId]?.uniqueId && storeHeartbeats[String(storeRegistryMap[cleanId].uniqueId).toLowerCase()]);
+      
+      // If heartbeats were registered for this store and last beat was >35 seconds ago, automatically close
+      if (lastBeat && (now - lastBeat > 35000)) {
+        record.isOpen = false;
+        record.status = "closed";
+        record.autoClosed = true;
+        record.updatedAt = new Date().toISOString();
+        saveStoreStatusRecord(cleanId, false, "closed");
+      }
+    }
+
+    return record;
   }
 
   // Fallback for default / unassigned query only
-  if (storeStatusMap["_default"]) return storeStatusMap["_default"];
-  if (storeStatusMap["default"]) return storeStatusMap["default"];
-  const defaultStore = storeRegistryMap["default"] || storeRegistryMap["center_default"];
-  if (defaultStore && typeof defaultStore.isOpen === 'boolean') {
-    return {
-      isOpen: defaultStore.isOpen,
-      status: defaultStore.status || (defaultStore.isOpen ? "active" : "closed"),
-      updatedAt: defaultStore.updatedAt || new Date().toISOString()
-    };
+  let defRecord = storeStatusMap["_default"] || storeStatusMap["default"];
+  if (!defRecord) {
+    const defaultStore = storeRegistryMap["default"] || storeRegistryMap["center_default"];
+    if (defaultStore && typeof defaultStore.isOpen === 'boolean') {
+      defRecord = {
+        isOpen: defaultStore.isOpen,
+        status: defaultStore.status || (defaultStore.isOpen ? "active" : "closed"),
+        updatedAt: defaultStore.updatedAt || new Date().toISOString()
+      };
+    } else {
+      defRecord = { isOpen: true, status: "active", updatedAt: new Date().toISOString() };
+    }
   }
 
-  return { isOpen: true, status: "active", updatedAt: new Date().toISOString() };
+  if (defRecord && defRecord.isOpen) {
+    const lastBeat = storeHeartbeats["default"] || storeHeartbeats["_default"] || storeHeartbeats["center_default"];
+    if (lastBeat && (now - lastBeat > 35000)) {
+      defRecord = {
+        ...defRecord,
+        isOpen: false,
+        status: "closed",
+        autoClosed: true,
+        updatedAt: new Date().toISOString()
+      };
+    }
+  }
+
+  return defRecord;
 }
 
 function getStoreRecord(centerQuery) {
@@ -363,15 +489,29 @@ function getStoreRecord(centerQuery) {
 
 function saveStoreRecord(centerData) {
   if (!centerData) return null;
-  const publicId = centerData.publicId || centerData.centerId || ('CTR-' + String(centerData.uniqueId || '100000').substring(0, 6));
+  const rawUid = centerData.uniqueId;
+  const assignedUid = (rawUid && Number(rawUid) >= 1000000 && String(rawUid) !== "1000000")
+    ? String(rawUid)
+    : getOrAssignUniqueId(centerData.centerId || centerData.publicId, {
+        uid: centerData.ownerUid || centerData.uid,
+        email: centerData.email || centerData.ownerEmail,
+        centerId: centerData.centerId,
+        storeName: centerData.storeName || centerData.name,
+        userName: centerData.userName,
+        phone: centerData.phone
+      });
+
+  const publicId = centerData.publicId || ('CTR-' + assignedUid);
   const record = {
     centerId: centerData.centerId || publicId,
     publicId: publicId,
-    uniqueId: String(centerData.uniqueId || '1000000'),
+    uniqueId: assignedUid,
     name: centerData.storeName || centerData.name || 'SmartPrint Xerox Center',
     storeName: centerData.storeName || centerData.name || 'SmartPrint Xerox Center',
+    userName: centerData.userName || '',
     address: centerData.address || 'Counter Pickup',
     phone: centerData.phone || '',
+    email: centerData.email || centerData.ownerEmail || '',
     rates: centerData.rates || { bwSingle: 2.0, bwDouble: 3.5, colorSingle: 10.0, colorDouble: 18.0 },
     isOpen: centerData.isOpen !== false && centerData.status !== 'closed',
     status: (centerData.isOpen !== false && centerData.status !== 'closed') ? 'active' : 'closed',
@@ -380,10 +520,15 @@ function saveStoreRecord(centerData) {
 
   storeRegistryMap[record.centerId] = record;
   storeRegistryMap[record.publicId] = record;
-  if (!storeRegistryMap[record.uniqueId] || storeRegistryMap[record.uniqueId].centerId === record.centerId) {
-    storeRegistryMap[record.uniqueId] = record;
+  storeRegistryMap[record.uniqueId] = record;
+  storeRegistryMap[record.centerId.toLowerCase()] = record;
+  storeRegistryMap[record.publicId.toLowerCase()] = record;
+  
+  if (record.storeName) {
+    storeRegistryMap[record.storeName.toLowerCase()] = record;
   }
-  if (!storeRegistryMap["default"] || record.centerId === "center_default" || record.publicId === "CTR-100000") {
+
+  if (!storeRegistryMap["default"] || record.centerId === "center_default" || record.publicId === "CTR-1000000" || record.publicId === "CTR-100000") {
     storeRegistryMap["default"] = record;
   }
 
@@ -405,9 +550,19 @@ function saveStoreStatusRecord(centerId, isOpen, status) {
   };
 
   const cleanId = centerId ? String(centerId).trim() : "";
+  const now = Date.now();
+
   if (cleanId) {
     storeStatusMap[cleanId] = record;
     storeStatusMap[cleanId.toLowerCase()] = record;
+
+    if (isOpen) {
+      storeHeartbeats[cleanId.toLowerCase()] = now;
+      storeHeartbeats[cleanId] = now;
+    } else {
+      delete storeHeartbeats[cleanId.toLowerCase()];
+      delete storeHeartbeats[cleanId];
+    }
 
     // Link aliases from store registry for THIS store only
     const regStore = Object.values(storeRegistryMap).find(c => 
@@ -419,20 +574,26 @@ function saveStoreStatusRecord(centerId, isOpen, status) {
       if (regStore.centerId) {
         storeStatusMap[regStore.centerId] = record;
         storeStatusMap[regStore.centerId.toLowerCase()] = record;
+        if (isOpen) storeHeartbeats[regStore.centerId.toLowerCase()] = now;
+        else delete storeHeartbeats[regStore.centerId.toLowerCase()];
       }
       if (regStore.publicId) {
         storeStatusMap[regStore.publicId] = record;
         storeStatusMap[regStore.publicId.toLowerCase()] = record;
+        if (isOpen) storeHeartbeats[regStore.publicId.toLowerCase()] = now;
+        else delete storeHeartbeats[regStore.publicId.toLowerCase()];
       }
       if (regStore.uniqueId) {
         storeStatusMap[String(regStore.uniqueId)] = record;
+        if (isOpen) storeHeartbeats[String(regStore.uniqueId).toLowerCase()] = now;
+        else delete storeHeartbeats[String(regStore.uniqueId).toLowerCase()];
       }
       regStore.isOpen = record.isOpen;
       regStore.status = record.status;
       regStore.updatedAt = record.updatedAt;
 
       // Only if this specific store is the default center, update default keys
-      if (regStore.centerId === "center_default" || regStore.publicId === "CTR-100000" || cleanId.toLowerCase() === "default") {
+      if (regStore.centerId === "center_default" || regStore.publicId === "CTR-1000000" || regStore.publicId === "CTR-100000" || cleanId.toLowerCase() === "default") {
         storeStatusMap["default"] = record;
         storeStatusMap["_default"] = record;
       }
@@ -493,6 +654,86 @@ const server = http.createServer((req, res) => {
       "Cache-Control": "no-cache"
     });
     res.end(jsContent);
+    return;
+  }
+
+  // Dynamic API endpoint: Authoritative Unique ID assignment starting from 1M (1,000,000)
+  if (pathname === "/api/user/unique-id") {
+    let uidQuery = parsedUrl.searchParams.get("uid") || "";
+    let emailQuery = parsedUrl.searchParams.get("email") || "";
+    let centerQuery = parsedUrl.searchParams.get("centerId") || "";
+    let nameQuery = parsedUrl.searchParams.get("displayName") || parsedUrl.searchParams.get("storeName") || "";
+    let phoneQuery = parsedUrl.searchParams.get("phone") || "";
+
+    const handleUidRequest = (data = {}) => {
+      const uid = data.uid || uidQuery;
+      const email = data.email || emailQuery;
+      const centerId = data.centerId || centerQuery;
+      const displayName = data.displayName || data.storeName || nameQuery;
+      const phone = data.phone || phoneQuery;
+
+      const primaryKey = uid || email || centerId || phone || displayName || "default_operator";
+      const assignedUniqueId = getOrAssignUniqueId(primaryKey, {
+        uid,
+        email,
+        centerId,
+        displayName,
+        phone
+      });
+
+      res.writeHead(200, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Access-Control-Allow-Origin": "*",
+        "Cache-Control": "no-cache"
+      });
+      res.end(JSON.stringify({
+        success: true,
+        uniqueId: assignedUniqueId,
+        publicId: "CTR-" + assignedUniqueId
+      }));
+    };
+
+    if (req.method === "POST") {
+      let bodyData = "";
+      req.on("data", chunk => { bodyData += chunk; if (bodyData.length > 1e5) req.destroy(); });
+      req.on("end", () => {
+        let b = {};
+        try { b = JSON.parse(bodyData || "{}"); } catch(e) {}
+        handleUidRequest(b);
+      });
+    } else {
+      handleUidRequest();
+    }
+    return;
+  }
+
+  // Dynamic API endpoint: Live Store Presence Heartbeat (Keepalive for Open Stores)
+  if (pathname === "/api/store/heartbeat") {
+    const centerQuery = parsedUrl.searchParams.get("center") || "";
+    const uidQuery = parsedUrl.searchParams.get("uniqueId") || "";
+    let bodyData = "";
+    req.on("data", chunk => { bodyData += chunk; if (bodyData.length > 1e5) req.destroy(); });
+    req.on("end", () => {
+      let parsedBody = {};
+      try { parsedBody = JSON.parse(bodyData || "{}"); } catch(e) {}
+      const cid = parsedBody.centerId || centerQuery;
+      const uid = parsedBody.uniqueId || uidQuery;
+      const now = Date.now();
+      if (cid) {
+        storeHeartbeats[cid.toLowerCase()] = now;
+        storeHeartbeats[cid] = now;
+      }
+      if (uid) {
+        storeHeartbeats[String(uid).toLowerCase()] = now;
+        storeHeartbeats[String(uid)] = now;
+      }
+      res.writeHead(200, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Access-Control-Allow-Origin": "*",
+        "Cache-Control": "no-cache"
+      });
+      res.end(JSON.stringify({ success: true, timestamp: now }));
+    });
     return;
   }
 

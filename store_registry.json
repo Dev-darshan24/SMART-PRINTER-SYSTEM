@@ -1,12 +1,14 @@
 {
   "center_default": {
     "centerId": "center_default",
-    "publicId": "CTR-100000",
+    "publicId": "CTR-1000000",
     "uniqueId": "1000000",
-    "name": "SmartPrint Xerox & Digital Store",
-    "storeName": "SmartPrint Xerox & Digital Store",
+    "name": "ZX THRONES's Center",
+    "storeName": "ZX THRONES's Center",
+    "userName": "ZX THRONES",
     "address": "Counter Pickup, Main Branch",
-    "phone": "+91 98765 43210",
+    "phone": "7788994455",
+    "gender": "Female",
     "rates": {
       "bwSingle": 2,
       "bwDouble": 3.5,
@@ -15,16 +17,58 @@
     },
     "isOpen": true,
     "status": "active",
-    "updatedAt": "2026-10-21T16:45:36.101Z"
+    "updatedAt": "2026-10-22T08:00:00.000Z"
+  },
+  "CTR-1000000": {
+    "centerId": "center_default",
+    "publicId": "CTR-1000000",
+    "uniqueId": "1000000",
+    "name": "ZX THRONES's Center",
+    "storeName": "ZX THRONES's Center",
+    "userName": "ZX THRONES",
+    "address": "Counter Pickup, Main Branch",
+    "phone": "7788994455",
+    "gender": "Female",
+    "rates": {
+      "bwSingle": 2,
+      "bwDouble": 3.5,
+      "colorSingle": 10,
+      "colorDouble": 18
+    },
+    "isOpen": true,
+    "status": "active",
+    "updatedAt": "2026-10-22T08:00:00.000Z"
+  },
+  "1000000": {
+    "centerId": "center_default",
+    "publicId": "CTR-1000000",
+    "uniqueId": "1000000",
+    "name": "ZX THRONES's Center",
+    "storeName": "ZX THRONES's Center",
+    "userName": "ZX THRONES",
+    "address": "Counter Pickup, Main Branch",
+    "phone": "7788994455",
+    "gender": "Female",
+    "rates": {
+      "bwSingle": 2,
+      "bwDouble": 3.5,
+      "colorSingle": 10,
+      "colorDouble": 18
+    },
+    "isOpen": true,
+    "status": "active",
+    "updatedAt": "2026-10-22T08:00:00.000Z"
   },
   "CTR-100000": {
     "centerId": "center_default",
-    "publicId": "CTR-100000",
+    "publicId": "CTR-1000000",
     "uniqueId": "1000000",
-    "name": "SmartPrint Xerox & Digital Store",
-    "storeName": "SmartPrint Xerox & Digital Store",
+    "name": "ZX THRONES's Center",
+    "storeName": "ZX THRONES's Center",
+    "userName": "ZX THRONES",
     "address": "Counter Pickup, Main Branch",
-    "phone": "+91 98765 43210",
+    "phone": "7788994455",
+    "gender": "Female",
     "rates": {
       "bwSingle": 2,
       "bwDouble": 3.5,
@@ -33,16 +77,18 @@
     },
     "isOpen": true,
     "status": "active",
-    "updatedAt": "2026-10-18T09:55:14.704Z"
+    "updatedAt": "2026-10-22T08:00:00.000Z"
   },
   "default": {
     "centerId": "center_default",
-    "publicId": "CTR-100000",
+    "publicId": "CTR-1000000",
     "uniqueId": "1000000",
-    "name": "SmartPrint Xerox & Digital Store",
-    "storeName": "SmartPrint Xerox & Digital Store",
+    "name": "ZX THRONES's Center",
+    "storeName": "ZX THRONES's Center",
+    "userName": "ZX THRONES",
     "address": "Counter Pickup, Main Branch",
-    "phone": "+91 98765 43210",
+    "phone": "7788994455",
+    "gender": "Female",
     "rates": {
       "bwSingle": 2,
       "bwDouble": 3.5,
@@ -51,16 +97,18 @@
     },
     "isOpen": true,
     "status": "active",
-    "updatedAt": "2026-10-18T09:55:14.704Z"
+    "updatedAt": "2026-10-22T08:00:00.000Z"
   },
   "center_fuU7qXKQ": {
     "centerId": "center_fuU7qXKQ",
-    "publicId": "CTR-FUU7QX",
+    "publicId": "CTR-1000001",
     "uniqueId": "1000001",
-    "name": "XEROX 1",
-    "storeName": "XEROX 1",
+    "name": "Jonny Triggered's Center",
+    "storeName": "Jonny Triggered's Center",
+    "userName": "Jonny Triggered",
     "address": "NAGPUR",
     "phone": "8888888877",
+    "gender": "Male",
     "rates": {
       "bwSingle": 5,
       "bwDouble": 8,
@@ -69,16 +117,58 @@
     },
     "isOpen": true,
     "status": "active",
-    "updatedAt": "2026-10-21T16:26:53.641Z"
+    "updatedAt": "2026-10-22T08:00:00.000Z"
+  },
+  "CTR-1000001": {
+    "centerId": "center_fuU7qXKQ",
+    "publicId": "CTR-1000001",
+    "uniqueId": "1000001",
+    "name": "Jonny Triggered's Center",
+    "storeName": "Jonny Triggered's Center",
+    "userName": "Jonny Triggered",
+    "address": "NAGPUR",
+    "phone": "8888888877",
+    "gender": "Male",
+    "rates": {
+      "bwSingle": 5,
+      "bwDouble": 8,
+      "colorSingle": 10,
+      "colorDouble": 18
+    },
+    "isOpen": true,
+    "status": "active",
+    "updatedAt": "2026-10-22T08:00:00.000Z"
+  },
+  "1000001": {
+    "centerId": "center_fuU7qXKQ",
+    "publicId": "CTR-1000001",
+    "uniqueId": "1000001",
+    "name": "Jonny Triggered's Center",
+    "storeName": "Jonny Triggered's Center",
+    "userName": "Jonny Triggered",
+    "address": "NAGPUR",
+    "phone": "8888888877",
+    "gender": "Male",
+    "rates": {
+      "bwSingle": 5,
+      "bwDouble": 8,
+      "colorSingle": 10,
+      "colorDouble": 18
+    },
+    "isOpen": true,
+    "status": "active",
+    "updatedAt": "2026-10-22T08:00:00.000Z"
   },
   "CTR-FUU7QX": {
     "centerId": "center_fuU7qXKQ",
-    "publicId": "CTR-FUU7QX",
+    "publicId": "CTR-1000001",
     "uniqueId": "1000001",
-    "name": "XEROX 1",
-    "storeName": "XEROX 1",
+    "name": "Jonny Triggered's Center",
+    "storeName": "Jonny Triggered's Center",
+    "userName": "Jonny Triggered",
     "address": "NAGPUR",
     "phone": "8888888877",
+    "gender": "Male",
     "rates": {
       "bwSingle": 5,
       "bwDouble": 8,
@@ -87,6 +177,6 @@
     },
     "isOpen": true,
     "status": "active",
-    "updatedAt": "2026-10-21T16:26:53.641Z"
+    "updatedAt": "2026-10-22T08:00:00.000Z"
   }
 }
